@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Local Ledger Upload</title>
+  </head>
+  <body style="font-family: sans-serif; padding: 2rem;">
+    <h1>Upload CSV</h1>
+
+    <form action="/upload" method="post" enctype="multipart/form-data">
+      <input type="file" name="csv_file" accept=".csv" required />
+      <button type="submit">Upload</button>
+    </form>
+  </body>
+</html>
