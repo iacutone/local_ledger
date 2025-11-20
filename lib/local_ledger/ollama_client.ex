@@ -12,197 +12,141 @@ defmodule LocalLedger.OllamaClient do
     url = "#{@base_url}/api/generate"
 
     body =
-      %{
+      JSON.encode!(%{
         model: @ollama_model,
         prompt: content,
         stream: true
-      }
-      |> JSON.encode!()
+      })
 
     Logger.info("=== OLLAMA REQUEST ===")
     Logger.info("Model: #{@ollama_model}")
-    Logger.info("URL: #{url}")
     Logger.info("Prompt length: #{String.length(content)} chars")
-    Logger.info("Prompt preview: #{String.slice(content, 0, 200)}")
 
-    headers = [
-      {"content-type", "application/json"}
-    ]
-
-    # Conn is already set up for chunked streaming by the router
+    headers = [{"content-type", "application/json"}]
     stream_ollama_response(conn, url, headers, body)
   end
 
   defp stream_ollama_response(conn, url, headers, body) do
-    parent = self()
+    Logger.info("Starting Ollama stream")
 
-    Logger.info("Starting Ollama stream request to #{url}")
+    result =
+      Finch.build(:post, url, headers, body)
+      |> Finch.stream(LocalLedger.Finch, {conn, ""}, fn
+        {:status, status}, {acc_conn, buffer} ->
+          if status != 200, do: Logger.error("HTTP #{status}")
+          {acc_conn, buffer}
 
-    Task.start(fn ->
-      try do
-        Finch.build(:post, url, headers, body)
-        |> Finch.stream(LocalLedger.Finch, "", fn
-          {:status, status}, acc ->
-            if status != 200 do
-              send(parent, {:error, "HTTP #{status}"})
+        {:headers, _}, {acc_conn, buffer} ->
+          {acc_conn, buffer}
+
+        {:data, data}, {acc_conn, buffer} ->
+          new_buffer = buffer <> data
+          lines = String.split(new_buffer, "\n")
+
+          {complete_lines, remaining} =
+            if length(lines) > 1 do
+              {Enum.take(lines, length(lines) - 1), List.last(lines)}
+            else
+              {[], new_buffer}
             end
-            {:cont, acc}
 
-          {:headers, _headers}, acc ->
-            {:cont, acc}
-
-          {:data, data}, acc ->
-            # Ensure acc is a string
-            acc_str = if is_binary(acc), do: acc, else: ""
-            # Buffer incomplete JSON lines
-            buffer = acc_str <> data
-            lines = String.split(buffer, "\n")
-
-            # Last element might be incomplete, keep it in buffer
-            {complete_lines, new_buffer} =
-              if length(lines) > 1 do
-                {Enum.take(lines, length(lines) - 1), List.last(lines)}
-              else
-                {[], buffer}
-              end
-
-            # Process complete lines
-            Enum.each(complete_lines, fn line ->
+          result_conn =
+            Enum.reduce(complete_lines, acc_conn, fn line, conn_acc ->
               if line != "" do
                 case JSON.decode(line) do
-                  {:ok, %{"response" => response, "done" => true}} when is_binary(response) ->
-                    Logger.debug("Received final chunk with done=true: #{String.slice(response, 0, 50)}")
-                    send(parent, {:chunk, response})
-                    send(parent, {:done})
+                  {:ok, %{"response" => resp}} when is_binary(resp) ->
+                    escaped =
+                      resp
+                      |> String.replace("&", "&amp;")
+                      |> String.replace("<", "&lt;")
+                      |> String.replace(">", "&gt;")
 
-                  {:ok, %{"response" => response, "done" => false}} when is_binary(response) ->
-                    send(parent, {:chunk, response})
-
-                  {:ok, %{"response" => response}} when is_binary(response) ->
-                    send(parent, {:chunk, response})
-
-                  {:ok, %{"done" => true}} ->
-                    Logger.debug("Received done=true without response")
-                    send(parent, {:done})
-
-                  {:ok, %{"error" => error}} ->
-                    send(parent, {:error, inspect(error)})
-
-                  {:error, decode_error} ->
-                    Logger.debug("JSON decode error: #{inspect(decode_error)}")
-                    :ok
+                    case chunk(conn_acc, escaped) do
+                      {:ok, new_conn} -> new_conn
+                      {:error, _} -> conn_acc
+                    end
 
                   _ ->
-                    :ok
+                    conn_acc
                 end
+              else
+                conn_acc
               end
             end)
 
-            {:cont, new_buffer}
+          {result_conn, remaining}
 
-          {:done, _}, acc ->
-            # Ensure acc is a string
-            acc_str = if is_binary(acc), do: acc, else: ""
-            # Process any remaining buffer
-            if acc_str != "" do
-              case JSON.decode(acc_str) do
-                {:ok, %{"response" => response}} when is_binary(response) ->
-                  send(parent, {:chunk, response})
-                _ -> :ok
+        {:done, _}, {acc_conn, buffer} ->
+          final_conn =
+            if buffer != "" do
+              case JSON.decode(buffer) do
+                {:ok, %{"response" => resp}} when is_binary(resp) ->
+                  escaped =
+                    resp
+                    |> String.replace("&", "&amp;")
+                    |> String.replace("<", "&lt;")
+                    |> String.replace(">", "&gt;")
+
+                  case chunk(acc_conn, escaped) do
+                    {:ok, new_conn} -> new_conn
+                    {:error, _} -> acc_conn
+                  end
+
+                _ ->
+                  acc_conn
               end
+            else
+              acc_conn
             end
 
-            send(parent, {:done})
-            {:cont, ""}
+          {final_conn, ""}
 
-          {:error, error}, acc ->
-            send(parent, {:error, inspect(error)})
-            {:cont, acc}
-        end)
-      catch
-        error ->
-          send(parent, {:error, inspect(error)})
-      end
-    end)
+        {:error, error}, {acc_conn, buffer} ->
+          Logger.error("Stream error: #{inspect(error)}")
+          {acc_conn, buffer}
+      end)
 
-    receive_stream(conn)
-  end
-
-  defp receive_stream(conn, buffer \\ "") do
-    receive do
-      {:chunk, content} ->
-        Logger.info("Received chunk to send: #{String.length(content)} chars - #{String.slice(content, 0, 50)}...")
-        # Accumulate content in buffer
-        new_buffer = buffer <> content
-
-        # Escape HTML to prevent breaking the page (but preserve formatting)
-        escaped_content =
-          content
-          |> String.replace("&", "&amp;")
-          |> String.replace("<", "&lt;")
-          |> String.replace(">", "&gt;")
-
-        # Send content with HTML escaping
-        case chunk(conn, escaped_content) do
-          {:ok, new_conn} ->
-            Logger.debug("Chunk sent successfully")
-            receive_stream(new_conn, new_buffer)
-          {:error, _} = error ->
-            Logger.error("Error sending chunk: #{inspect(error)}")
-            error
-        end
-
-      {:done} ->
+    case result do
+      {:ok, {final_conn, _}} ->
         Logger.info("Stream completed")
-        conn
+        final_conn
+
+      {:error, %Mint.TransportError{reason: :timeout}, {partial_conn, _}} ->
+        Logger.error("Request timeout")
+        chunk(partial_conn, "\n\n[Timeout]")
+        partial_conn
+
+      {:error, error, {partial_conn, _}} ->
+        Logger.error("Finch error: #{inspect(error)}")
+        chunk(partial_conn, "\n\n[Error]")
+        partial_conn
 
       {:error, error} ->
-        Logger.error("Stream error: #{inspect(error)}")
-        escaped_error =
-          error
-          |> inspect()
-          |> String.replace("&", "&amp;")
-          |> String.replace("<", "&lt;")
-          |> String.replace(">", "&gt;")
-
-        chunk(conn, "\n\nError: #{escaped_error}")
-        conn
-
-      {:DOWN, _ref, :process, _pid, reason} ->
-        Logger.error("Task process died: #{inspect(reason)}")
-        chunk(conn, "\n\nError: Task process died: #{inspect(reason)}")
-        conn
-    after
-      # 5 minute timeout
-      300_000 ->
-        Logger.warning("Stream timeout after 5 minutes")
+        Logger.error("Finch error: #{inspect(error)}")
+        chunk(conn, "\n\n[Error]")
         conn
     end
   end
 
   def parse_csv_and_prepare_batches(csv_content) do
-    # Split CSV into batches of 20 transactions
-    lines = csv_content
-    |> String.trim()
-    |> String.split("\n")
-    |> Enum.filter(&(&1 != ""))
-    
-    # Separate header and data
-    {header, data_lines} = case lines do
-      [h | rest] -> {h, rest}
-      [] -> {"", []}
-    end
-    
-    # Create batches of 20 with header
-    batches = data_lines
-    |> Enum.chunk_every(20)
-    |> Enum.map(fn batch -> 
-      [header | batch] |> Enum.join("\n")
-    end)
-    
-    Logger.info("Split CSV into #{length(batches)} batches")
-    Logger.info("Total transactions: #{length(data_lines)}")
-    
+    lines =
+      csv_content
+      |> String.trim()
+      |> String.split("\n")
+      |> Enum.filter(&(&1 != ""))
+
+    {header, data_lines} =
+      case lines do
+        [h | rest] -> {h, rest}
+        [] -> {"", []}
+      end
+
+    batches =
+      data_lines
+      |> Enum.chunk_every(20)
+      |> Enum.map(fn batch -> [header | batch] |> Enum.join("\n") end)
+
+    Logger.info("Split into #{length(batches)} batches (#{length(data_lines)} transactions)")
     batches
   end
 end
