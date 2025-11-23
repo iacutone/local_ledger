@@ -17,48 +17,7 @@ defmodule LocalLedger.Router do
     send_resp(conn, 200, html)
   end
 
-  post "/upload" do
-    case conn.params do
-      %{"csv_file" => %Plug.Upload{path: path}} ->
-        batches = LocalLedger.OllamaClient.stream_csv_batches(path) |> Enum.to_list()
 
-        html_start = Render.render("results_start.html.eex", batch_count: length(batches))
-        html_end = Render.render("results_end.html.eex")
-
-        conn
-        |> put_resp_header("content-type", "text/html; charset=utf-8")
-        |> put_resp_header("transfer-encoding", "chunked")
-        |> send_chunked(200)
-        |> then(fn conn ->
-          {:ok, conn} = chunk(conn, html_start)
-          
-          # Process batches and stream directly
-          final_conn =
-            Enum.with_index(batches, 1)
-            |> Enum.reduce(conn, fn {batch, index}, acc_conn ->
-              acc_conn =
-                if index > 1 do
-                  # Update status and add separator
-                  status_update = "<script>document.getElementById('status').textContent='Processing batch #{index} of #{length(batches)}...';</script>"
-                  {:ok, conn_with_status} = chunk(acc_conn, status_update)
-                  Process.sleep(2000)
-                  {:ok, conn_with_sep} = chunk(conn_with_status, "\n\n")
-                  conn_with_sep
-                else
-                  acc_conn
-                end
-
-              LocalLedger.OllamaClient.stream_batch_to_conn(batch, acc_conn)
-            end)
-          
-          {:ok, conn} = chunk(final_conn, html_end)
-          conn
-        end)
-
-      _ ->
-        send_resp(conn, 400, "No file uploaded")
-    end
-  end
 
   match _ do
     send_resp(conn, 404, "Not Found")
