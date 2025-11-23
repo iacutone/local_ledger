@@ -58,7 +58,7 @@ defmodule LocalLedger.OllamaClient do
 
     headers = [{"content-type", "application/json"}]
 
-    Finch.build(:post, url, headers, body)
+    result = Finch.build(:post, url, headers, body)
     |> Finch.stream(LocalLedger.Finch, {conn, ""}, fn
       {:data, data}, {conn_acc, buffer} ->
         new_buffer = buffer <> data
@@ -75,8 +75,12 @@ defmodule LocalLedger.OllamaClient do
           if line != "" do
             case JSON.decode(line) do
               {:ok, %{"response" => resp}} when is_binary(resp) ->
-                {:ok, new_conn} = Plug.Conn.chunk(acc_conn, resp)
-                new_conn
+                case Plug.Conn.chunk(acc_conn, resp) do
+                  {:ok, new_conn} -> new_conn
+                  {:error, reason} ->
+                    Logger.error("Chunk error: #{inspect(reason)}")
+                    acc_conn
+                end
               _ -> acc_conn
             end
           else
@@ -88,8 +92,10 @@ defmodule LocalLedger.OllamaClient do
 
       _, {conn_acc, buffer} -> {conn_acc, buffer}
     end)
-    |> case do
-      {:ok, {final_conn, _buffer}} -> final_conn
+
+    case result do
+      {:ok, {final_conn, _buffer}} -> 
+        final_conn
       {:error, reason} -> 
         Logger.error("Stream error: #{inspect(reason)}")
         conn

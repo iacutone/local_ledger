@@ -33,19 +33,20 @@ defmodule LocalLedger.Router do
           {:ok, conn} = chunk(conn, html_start)
           
           # Process batches and stream directly
-          final_conn = Enum.with_index(batches, 1)
-          |> Enum.reduce(conn, fn {batch, index}, acc_conn ->
-            if index > 1 do
-              Process.sleep(2000)
-              {:ok, conn_with_sep} = chunk(acc_conn, "\n\n")
-              conn_with_sep
-            else
-              acc_conn
-            end
-            |> then(fn c ->
-              LocalLedger.OllamaClient.stream_batch_to_conn(batch, c)
+          final_conn =
+            Enum.with_index(batches, 1)
+            |> Enum.reduce(conn, fn {batch, index}, acc_conn ->
+              acc_conn =
+                if index > 1 do
+                  Process.sleep(2000)
+                  {:ok, conn_with_sep} = chunk(acc_conn, "\n\n")
+                  conn_with_sep
+                else
+                  acc_conn
+                end
+
+              LocalLedger.OllamaClient.stream_batch_to_conn(batch, acc_conn)
             end)
-          end)
           
           {:ok, conn} = chunk(final_conn, html_end)
           conn
