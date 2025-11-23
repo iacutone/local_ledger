@@ -29,14 +29,10 @@ defmodule LocalLedger.BatchSocket do
             # Prepare batches
             batches = LocalLedger.OllamaClient.parse_csv_and_prepare_batches(csv_content)
             
-            Logger.info("Starting batch processing: #{length(batches)} batches")
+            Logger.info("Processing #{length(batches)} batches")
             
-            # Process each batch with streaming
             Enum.with_index(batches, 1)
             |> Enum.each(fn {batch, index} ->
-              Logger.info("Processing batch #{index}/#{length(batches)}")
-              
-              # Send batch progress update
               send(ws_pid, {:batch_progress, index, length(batches)})
               
               if index > 1 do
@@ -44,15 +40,10 @@ defmodule LocalLedger.BatchSocket do
                 send(ws_pid, {:batch_separator})
               end
               
-              # Stream this batch
               LocalLedger.OllamaClient.stream_batch_to_pid(batch, ws_pid)
-              
-              Logger.info("Batch #{index} complete")
             end)
             
-            Logger.info("All batches completed, sending done")
             send(ws_pid, :processing_done)
-            Logger.info("Sent done message")
           rescue
             e ->
               Logger.error("Error in batch processing task: #{inspect(e)}")
@@ -87,7 +78,6 @@ defmodule LocalLedger.BatchSocket do
   end
 
   def websocket_info(:processing_done, state) do
-    Logger.info("Sending done message via WebSocket")
     msg = JSON.encode!(%{type: "done"})
     {:reply, {:text, msg}, state}
   end
