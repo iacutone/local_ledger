@@ -4,11 +4,14 @@ defmodule LocalLedger.OllamaClient do
   """
   require Logger
 
-  @base_url "http://localhost:11434"
   @ollama_model "ledger"
 
+  defp base_url do
+    Application.get_env(:local_ledger, :ollama_base_url, "http://localhost:11434")
+  end
+
   def stream_batch_to_pid(content, pid) do
-    url = "#{@base_url}/api/generate"
+    url = "#{base_url()}/api/generate"
 
     body = JSON.encode!(%{
       model: @ollama_model,
@@ -48,7 +51,7 @@ defmodule LocalLedger.OllamaClient do
   end
 
   def stream_batch_to_conn(content, conn) do
-    url = "#{@base_url}/api/generate"
+    url = "#{base_url()}/api/generate"
 
     body = JSON.encode!(%{
       model: @ollama_model,

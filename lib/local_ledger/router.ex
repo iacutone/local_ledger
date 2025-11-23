@@ -17,8 +17,6 @@ defmodule LocalLedger.Router do
     send_resp(conn, 200, html)
   end
 
-
-
   match _ do
     send_resp(conn, 404, "Not Found")
   end
