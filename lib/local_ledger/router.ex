@@ -2,12 +2,12 @@ defmodule LocalLedger.Router do
   use Plug.Router
   import Plug.Conn
   alias LocalLedger.Render
-  alias LocalLedger.OllamaClient
 
   plug(Plug.Parsers,
     parsers: [:urlencoded, :multipart],
     length: 10_000_000
   )
+
   plug(Plug.Static, from: :local_ledger, at: "/")
   plug(:match)
   plug(:dispatch)
@@ -20,11 +20,10 @@ defmodule LocalLedger.Router do
   post "/upload" do
     case conn.params do
       %{"csv_file" => %Plug.Upload{path: path}} ->
+        # Read CSV content once
         csv_content = File.read!(path)
-        batches = OllamaClient.parse_csv_and_prepare_batches(csv_content)
 
-        # Send initial HTML structure
-        html_start = """
+        html = """
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -45,8 +44,7 @@ defmodule LocalLedger.Router do
               overflow-x: auto;
               border: 1px solid #3e3e42;
             }
-            .loading { color: #858585; }
-            .batch-separator { color: #666; margin: 1rem 0; }
+            .status { color: #858585; margin: 1rem 0; }
             a { color: #4ec9b0; text-decoration: none; }
             a:hover { text-decoration: underline; }
           </style>
@@ -54,42 +52,47 @@ defmodule LocalLedger.Router do
         <body>
           <h1>Ledger Conversion Results</h1>
           <a href="/">← Upload Another File</a>
-          <p class="loading">Processing #{length(batches)} batches...</p>
-          <div class="response" id="response">
+          <div class="status" id="status">Connecting...</div>
+          <div class="response" id="response"></div>
+          
+          <script>
+            const ws = new WebSocket('ws://' + window.location.host + '/ws');
+            const response = document.getElementById('response');
+            const status = document.getElementById('status');
+            
+            ws.onopen = () => {
+              console.log('WebSocket connected');
+              status.textContent = 'Processing batches...';
+              ws.send(JSON.stringify({action: 'process', csv_content: #{JSON.encode!(csv_content)}}));
+            };
+            
+            ws.onmessage = (event) => {
+              const data = JSON.parse(event.data);
+              if (data.type === 'chunk') {
+                response.textContent += data.text;
+              } else if (data.type === 'progress') {
+                status.textContent = 'Processing batch ' + data.current + ' of ' + data.total + '...';
+              } else if (data.type === 'done') {
+                console.log('All done');
+                status.textContent = 'All batches completed!';
+                ws.close();
+              }
+            };
+            
+            ws.onerror = (error) => {
+              console.error('WebSocket error:', error);
+              status.textContent = 'Error: ' + error;
+            };
+            
+            ws.onclose = (event) => {
+              console.log('WebSocket closed:', event.code, event.reason);
+            };
+          </script>
+        </body>
+        </html>
         """
 
-        conn
-        |> put_resp_header("content-type", "text/html; charset=utf-8")
-        |> put_resp_header("transfer-encoding", "chunked")
-        |> send_chunked(200)
-        |> then(fn conn ->
-          {:ok, conn} = chunk(conn, html_start)
-          
-          # Process each batch sequentially
-          final_conn = Enum.with_index(batches, 1)
-          |> Enum.reduce(conn, fn {batch, index}, acc_conn ->
-            require Logger
-            Logger.info("Processing batch #{index}/#{length(batches)}")
-            
-            result_conn = OllamaClient.stream_to_conn(batch, acc_conn)
-            
-            Logger.info("Completed batch #{index}/#{length(batches)}")
-            result_conn
-          end)
-          
-          final_conn
-        end)
-        |> then(fn conn ->
-          html_end = """
-            </div>
-          </body>
-          </html>
-          """
-          case chunk(conn, html_end) do
-            {:ok, conn} -> conn
-            {:error, _} = error -> error
-          end
-        end)
+        send_resp(conn, 200, html)
 
       _ ->
         send_resp(conn, 400, "No file uploaded")

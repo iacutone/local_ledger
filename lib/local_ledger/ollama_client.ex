@@ -8,6 +8,70 @@ defmodule LocalLedger.OllamaClient do
   @base_url "http://localhost:11434"
   @ollama_model "ledger"
 
+  def stream_batch_to_pid(content, pid) do
+    url = "#{@base_url}/api/generate"
+
+    body = JSON.encode!(%{
+      model: @ollama_model,
+      prompt: content,
+      stream: true
+    })
+
+    headers = [{"content-type", "application/json"}]
+
+    Finch.build(:post, url, headers, body)
+    |> Finch.stream(LocalLedger.Finch, "", fn
+      {:data, data}, buffer ->
+        new_buffer = buffer <> data
+        lines = String.split(new_buffer, "\n")
+
+        {complete_lines, remaining} =
+          if length(lines) > 1 do
+            {Enum.take(lines, length(lines) - 1), List.last(lines)}
+          else
+            {[], new_buffer}
+          end
+
+        Enum.each(complete_lines, fn line ->
+          if line != "" do
+            case JSON.decode(line) do
+              {:ok, %{"response" => resp}} when is_binary(resp) ->
+                send(pid, {:chunk, resp})
+              _ -> :ok
+            end
+          end
+        end)
+
+        remaining
+
+      _, buffer -> buffer
+    end)
+  end
+
+  def process_batch_sync(content) do
+    url = "#{@base_url}/api/generate"
+
+    body = JSON.encode!(%{
+      model: @ollama_model,
+      prompt: content,
+      stream: false
+    })
+
+    headers = [{"content-type", "application/json"}]
+
+    case Finch.build(:post, url, headers, body)
+    |> Finch.request(LocalLedger.Finch, receive_timeout: :infinity) do
+      {:ok, %{status: 200, body: response_body}} ->
+        case JSON.decode(response_body) do
+          {:ok, %{"response" => response}} -> response
+          _ -> "[Error: Invalid response]"
+        end
+      {:error, error} ->
+        Logger.error("Finch error: #{inspect(error)}")
+        "[Error: Request failed]"
+    end
+  end
+
   def stream_to_conn(content, conn, _opts \\ []) do
     url = "#{@base_url}/api/generate"
 
