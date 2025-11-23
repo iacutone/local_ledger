@@ -6,8 +6,9 @@
 
 ## Dependencies
 
-- Ollama ([link](https://ollama.com/))
+- [Ollama](https://ollama.com/))
 - Elixir (via [asdf](https://asdf-vm.com/))
+- [ngrok](https://ngrok.com/) tunnel
 
 
 ## To Run
@@ -16,6 +17,7 @@
 - `ollama create ledger -f Modelfile`
 - `mix run --no-halt`
 - Visit `http://localhost:4000`
+- For Docker, set `OLLAMA_BASE_URL` to the static ngrok url
 
 ## TODO
 
