@@ -38,8 +38,11 @@ defmodule LocalLedger.Router do
             |> Enum.reduce(conn, fn {batch, index}, acc_conn ->
               acc_conn =
                 if index > 1 do
+                  # Update status and add separator
+                  status_update = "<script>document.getElementById('status').textContent='Processing batch #{index} of #{length(batches)}...';</script>"
+                  {:ok, conn_with_status} = chunk(acc_conn, status_update)
                   Process.sleep(2000)
-                  {:ok, conn_with_sep} = chunk(acc_conn, "\n\n")
+                  {:ok, conn_with_sep} = chunk(conn_with_status, "\n\n")
                   conn_with_sep
                 else
                   acc_conn

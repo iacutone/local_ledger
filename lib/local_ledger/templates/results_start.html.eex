@@ -14,5 +14,5 @@
 <body>
   <h1>Ledger Conversion Results</h1>
   <a href="/">← Upload Another</a>
-  <div class="status">Processing <%= batch_count %> batches...</div>
+  <div class="status" id="status">Processing batch 1 of <%= batch_count %>...</div>
   <div class="response">
