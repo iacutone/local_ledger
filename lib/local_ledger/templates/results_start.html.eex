@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>Ledger Conversion</title>
+  <style>
+    body{font-family:sans-serif;padding:2rem;max-width:1200px;margin:0 auto;background:#1e1e1e;color:#d4d4d4}
+    h1{color:#4ec9b0}
+    .status{color:#858585;margin:1rem 0}
+    .response{white-space:pre;background:#252526;padding:1.5rem;border-radius:8px;margin-top:1rem;font-family:Monaco,monospace;font-size:14px;line-height:1.6;overflow-x:auto;border:1px solid #3e3e42}
+    a{color:#4ec9b0;text-decoration:none}
+  </style>
+</head>
+<body>
+  <h1>Ledger Conversion Results</h1>
+  <a href="/">← Upload Another</a>
+  <div class="status">Processing <%= batch_count %> batches...</div>
+  <div class="response">

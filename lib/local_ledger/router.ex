@@ -20,79 +20,36 @@ defmodule LocalLedger.Router do
   post "/upload" do
     case conn.params do
       %{"csv_file" => %Plug.Upload{path: path}} ->
-        # Read CSV content once
-        csv_content = File.read!(path)
+        batches = LocalLedger.OllamaClient.stream_csv_batches(path) |> Enum.to_list()
 
-        html = """
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-          <meta charset="UTF-8" />
-          <title>Ledger Conversion Results</title>
-          <style>
-            body { font-family: sans-serif; padding: 2rem; max-width: 1200px; margin: 0 auto; background: #1e1e1e; color: #d4d4d4; }
-            h1 { color: #4ec9b0; }
-            .response { 
-              white-space: pre; 
-              background: #252526; 
-              padding: 1.5rem; 
-              border-radius: 8px; 
-              margin-top: 1rem; 
-              font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-              font-size: 14px;
-              line-height: 1.6;
-              overflow-x: auto;
-              border: 1px solid #3e3e42;
-            }
-            .status { color: #858585; margin: 1rem 0; }
-            a { color: #4ec9b0; text-decoration: none; }
-            a:hover { text-decoration: underline; }
-          </style>
-        </head>
-        <body>
-          <h1>Ledger Conversion Results</h1>
-          <a href="/">← Upload Another File</a>
-          <div class="status" id="status">Connecting...</div>
-          <div class="response" id="response"></div>
+        html_start = Render.render("results_start.html.eex", batch_count: length(batches))
+        html_end = Render.render("results_end.html.eex")
+
+        conn
+        |> put_resp_header("content-type", "text/html; charset=utf-8")
+        |> put_resp_header("transfer-encoding", "chunked")
+        |> send_chunked(200)
+        |> then(fn conn ->
+          {:ok, conn} = chunk(conn, html_start)
           
-          <script>
-            const ws = new WebSocket('ws://' + window.location.host + '/ws');
-            const response = document.getElementById('response');
-            const status = document.getElementById('status');
-            
-            ws.onopen = () => {
-              console.log('WebSocket connected');
-              status.textContent = 'Processing batches...';
-              ws.send(JSON.stringify({action: 'process', csv_content: #{JSON.encode!(csv_content)}}));
-            };
-            
-            ws.onmessage = (event) => {
-              const data = JSON.parse(event.data);
-              if (data.type === 'chunk') {
-                response.textContent += data.text;
-              } else if (data.type === 'progress') {
-                status.textContent = 'Processing batch ' + data.current + ' of ' + data.total + '...';
-              } else if (data.type === 'done') {
-                console.log('All done');
-                status.textContent = 'All batches completed!';
-                ws.close();
-              }
-            };
-            
-            ws.onerror = (error) => {
-              console.error('WebSocket error:', error);
-              status.textContent = 'Error: ' + error;
-            };
-            
-            ws.onclose = (event) => {
-              console.log('WebSocket closed:', event.code, event.reason);
-            };
-          </script>
-        </body>
-        </html>
-        """
-
-        send_resp(conn, 200, html)
+          # Process batches and stream directly
+          final_conn = Enum.with_index(batches, 1)
+          |> Enum.reduce(conn, fn {batch, index}, acc_conn ->
+            if index > 1 do
+              Process.sleep(2000)
+              {:ok, conn_with_sep} = chunk(acc_conn, "\n\n")
+              conn_with_sep
+            else
+              acc_conn
+            end
+            |> then(fn c ->
+              LocalLedger.OllamaClient.stream_batch_to_conn(batch, c)
+            end)
+          end)
+          
+          {:ok, conn} = chunk(final_conn, html_end)
+          conn
+        end)
 
       _ ->
         send_resp(conn, 400, "No file uploaded")

@@ -26,7 +26,7 @@ defmodule LocalLedger.BatchSocket do
         # Spawn a task to handle processing
         Task.start(fn ->
           try do
-            # Prepare batches
+            # Parse CSV content to get batches
             batches = LocalLedger.OllamaClient.parse_csv_and_prepare_batches(csv_content)
             
             Logger.info("Processing #{length(batches)} batches")
