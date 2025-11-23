@@ -110,37 +110,29 @@ YYYY/MM/DD Merchant Name
 
 ## Output Format
 Each transaction must be formatted as:
-```
+
 YYYY/MM/DD Merchant Name
   Category                    $amount
   ACCOUNT_TYPE                $-amount
-```
 
 Rules:
-- Only output the ledger entries in a single code block
-- No explanations or extra text
+- Output ONLY the ledger entries, no code blocks, no markdown, no extra text
 - Convert dates from MM/DD/YYYY to YYYY/MM/DD
 - Clean merchant names to Proper Case
 - Expenses are positive, account debits are negative
 """
 
 MESSAGE user "12/30/2019,12/31/2019,SQ *GLEN EDITH COFFEE,Food & Drink,Sale,-22.13"
-MESSAGE assistant """```ledger
-2019/12/30 SQ *Glen Edith Coffee
+MESSAGE assistant """2019/12/30 SQ *Glen Edith Coffee
   Expenses:Food               $22.13
-  ACCOUNT_TYPE                $-22.13
-```"""
+  ACCOUNT_TYPE                $-22.13"""
 
 MESSAGE user "01/05/2020,01/05/2020,SHELL OIL #1234567,Gas,Sale,-45.30"
-MESSAGE assistant """```ledger
-2020/01/05 Shell Oil #1234567
+MESSAGE assistant """2020/01/05 Shell Oil #1234567
   Expenses:Transportation     $45.30
-  ACCOUNT_TYPE                $-45.30
-```"""
+  ACCOUNT_TYPE                $-45.30"""
 
 MESSAGE user "11/19/2019,11/19/2019,AUTOMATIC PAYMENT - THANK,,Payment,2975.86"
-MESSAGE assistant """```ledger
-2019/11/19 Automatic Payment - Thank
+MESSAGE assistant """2019/11/19 Automatic Payment - Thank
   Liabilities:ACCOUNT_TYPE     $2975.86
-  Assets:Cash                  $-2975.86
-```"""
+  Assets:Cash                  $-2975.86"""
