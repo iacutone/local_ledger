@@ -1,0 +1,36 @@
+service: local-ledger
+image: registry.iacutone.synology.me/local_ledger
+
+servers:
+  web:
+    - "5.161.60.147"
+
+registry:
+  server: registry.iacutone.synology.me
+  username: iacutone
+  password:
+    - REGISTRY_PASSWORD
+
+proxy:
+  ssl: true
+  app_port: 4000
+  host: local-ledger.com
+
+  healthcheck:
+    interval: 5
+    path: /
+    timeout: 3
+
+env:
+  clear:
+    PORT: 4000
+    SHELL: /bin/sh
+  secret:
+    - OLLAMA_BASE_URL
+
+builder:
+  arch: amd64
+
+aliases:
+  shell: app exec --interactive --reuse "/bin/sh"
+  logs: app logs -f
