@@ -1,101 +1,117 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Local Ledger Upload</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <style>
-    body{font-family:sans-serif;padding:2rem;max-width:1200px;margin:0 auto;background:#1e1e1e;color:#d4d4d4}
-    h1{color:#4ec9b0}
-    .status{color:#858585;margin:1rem 0}
-    .response{white-space:pre;background:#252526;padding:1.5rem;border-radius:8px;margin-top:1rem;font-family:Monaco,monospace;font-size:14px;line-height:1.6;overflow-x:auto;border:1px solid #3e3e42}
-    button{background:#4ec9b0;color:#1e1e1e;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;font-size:16px}
-    button:hover{background:#6ed9c0}
-    input[type="file"]{margin-right:1rem}
-  </style>
-</head>
-<body>
-  <h1>Upload CSV</h1>
-  <input type="file" id="csvFile" accept=".csv" />
-  <button onclick="uploadFile()">Upload & Process</button>
-  <div id="status" class="status"></div>
-  <button id="downloadBtn" style="display:none;margin-top:1rem;" onclick="downloadLedger()">Download Ledger</button>
-  <div id="response" class="response" style="display:none;"></div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Convert bank CSV transactions to ledger format using AI. Upload your credit card or bank statements and get clean, categorized ledger entries.">
+    <meta name="keywords" content="ledger, accounting, csv converter, bank transactions, plain text accounting, financial tools">
+    <meta name="author" content="Local Ledger">
+    <meta name="robots" content="index, follow">
+    
+    <title>Local Ledger - Convert Bank CSV to Ledger Format</title>
+    
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="canonical" href="https://collection.email">
+    
+    <meta property="og:title" content="Local Ledger - CSV to Ledger Converter">
+    <meta property="og:description" content="Convert bank CSV transactions to ledger format using AI">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://local-ledger.com/">
+    <script defer data-domain="local-ledger.com" src="https://plausible.iacutone.synology.me/js/script.js"></script>
+  </head>
+  <body>
+    <h1>Upload CSV</h1>
+    <input type="file" id="csvFile" accept=".csv" />
+    <button onclick="uploadFile()">Upload & Process</button>
+    <div id="status" class="status"></div>
+    <button id="downloadBtn" style="display:none;margin-top:1rem;" onclick="downloadLedger()">Download Ledger</button>
+    <div id="response" class="response" style="display:none;"></div>
 
-  <script>
-    let ledgerContent = '';
+    <script>
+      let ledgerContent = '';
 
-    function uploadFile() {
-      const fileInput = document.getElementById('csvFile');
-      const file = fileInput.files[0];
-      if (!file) {
-        alert('Please select a file');
-        return;
+      function uploadFile() {
+        const fileInput = document.getElementById('csvFile');
+        const file = fileInput.files[0];
+        if (!file) {
+          alert('Please select a file');
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const csvContent = e.target.result;
+          processWithWebSocket(csvContent);
+        };
+        reader.readAsText(file);
       }
 
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const csvContent = e.target.result;
-        processWithWebSocket(csvContent);
-      };
-      reader.readAsText(file);
-    }
-
-    function processWithWebSocket(csvContent) {
-      const statusDiv = document.getElementById('status');
-      const responseDiv = document.getElementById('response');
-      const downloadBtn = document.getElementById('downloadBtn');
-      
-      statusDiv.textContent = 'Connecting...';
-      responseDiv.style.display = 'block';
-      responseDiv.textContent = '';
-      downloadBtn.style.display = 'none';
-      ledgerContent = '';
-
-      const ws = new WebSocket('ws://' + window.location.host + '/ws');
-
-      ws.onopen = function() {
-        statusDiv.textContent = 'Connected. Processing...';
-        ws.send(JSON.stringify({
-          action: 'process',
-          csv_content: csvContent
-        }));
-      };
-
-      ws.onmessage = function(event) {
-        const data = JSON.parse(event.data);
+      function processWithWebSocket(csvContent) {
+        const statusDiv = document.getElementById('status');
+        const responseDiv = document.getElementById('response');
+        const downloadBtn = document.getElementById('downloadBtn');
         
-        if (data.type === 'progress') {
-          statusDiv.textContent = 'Processing batch ' + data.current + ' of ' + data.total + '...';
-        } else if (data.type === 'chunk') {
-          responseDiv.textContent += data.text;
-          ledgerContent += data.text;
-        } else if (data.type === 'done') {
-          statusDiv.textContent = 'All batches completed!';
-          downloadBtn.style.display = 'inline-block';
-        }
-      };
+        statusDiv.textContent = 'Connecting...';
+        responseDiv.style.display = 'block';
+        responseDiv.textContent = '';
+        downloadBtn.style.display = 'none';
+        ledgerContent = '';
 
-      ws.onerror = function(error) {
-        statusDiv.textContent = 'Error: ' + error;
-      };
+        const ws = new WebSocket('ws://' + window.location.host + '/ws');
 
-      ws.onclose = function() {
-        console.log('WebSocket closed');
-      };
-    }
+        ws.onopen = function() {
+          statusDiv.textContent = 'Connected. Processing...';
+          ws.send(JSON.stringify({
+            action: 'process',
+            csv_content: csvContent
+          }));
+        };
 
-    function downloadLedger() {
-      const blob = new Blob([ledgerContent], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'ledger.txt';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-  </script>
-</body>
+        ws.onmessage = function(event) {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'progress') {
+            statusDiv.textContent = 'Processing batch ' + data.current + ' of ' + data.total + '...';
+          } else if (data.type === 'chunk') {
+            responseDiv.textContent += data.text;
+            ledgerContent += data.text;
+          } else if (data.type === 'done') {
+            statusDiv.textContent = 'All batches completed!';
+            downloadBtn.style.display = 'inline-block';
+          }
+        };
+
+        ws.onerror = function(error) {
+          statusDiv.textContent = 'Error: ' + error;
+        };
+
+        ws.onclose = function() {
+          console.log('WebSocket closed');
+        };
+      }
+
+      function downloadLedger() {
+        const blob = new Blob([ledgerContent], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'ledger.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    </script>
+
+    <style>
+      body{font-family:sans-serif;padding:2rem;max-width:1200px;margin:0 auto;background:#1e1e1e;color:#d4d4d4}
+      h1{color:#4ec9b0}
+      .status{color:#858585;margin:1rem 0}
+      .response{white-space:pre;background:#252526;padding:1.5rem;border-radius:8px;margin-top:1rem;font-family:Monaco,monospace;font-size:14px;line-height:1.6;overflow-x:auto;border:1px solid #3e3e42}
+      button{background:#4ec9b0;color:#1e1e1e;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;font-size:16px}
+      button:hover{background:#6ed9c0}
+      input[type="file"]{margin-right:1rem}
+    </style>
+
+  </body>
 </html>
