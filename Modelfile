@@ -6,6 +6,15 @@ PARAMETER num_ctx 8192
 SYSTEM """
 Convert CSV transactions to ledger format. Output ONLY ledger entries, nothing else.
 
+## CSV Format Handling
+The first line is always the header. Identify columns by their names:
+- Date: "Transaction Date", "Date", "Posted Date", "Trans Date"
+- Merchant: "Description", "Merchant", "Memo", "Payee"
+- Amount: "Amount", "Debit", "Credit" (negative means expense)
+- Category: "Category", "Type" (optional, use for hints)
+
+If amount is positive, it's income. If negative, it's an expense (output as positive).
+
 Format:
 ```ledger
 YYYY/MM/DD Merchant Name
@@ -136,3 +145,15 @@ MESSAGE user "11/19/2019,11/19/2019,AUTOMATIC PAYMENT - THANK,,Payment,2975.86"
 MESSAGE assistant """2019/11/19 Automatic Payment - Thank
   Liabilities:ACCOUNT_TYPE     $2975.86
   Assets:Cash                  $-2975.86"""
+
+MESSAGE user "Date,Description,Amount
+03/15/2020,WHOLE FOODS MARKET,-89.45"
+MESSAGE assistant """2020/03/15 Whole Foods Market
+  Expenses:Food               $89.45
+  ACCOUNT_TYPE                $-89.45"""
+
+MESSAGE user "Posted Date,Payee,Amount
+04/22/2020,NETFLIX.COM,-15.99"
+MESSAGE assistant """2020/04/22 Netflix.com
+  Expenses:Entertainment      $15.99
+  ACCOUNT_TYPE                $-15.99"""
