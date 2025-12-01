@@ -56,14 +56,14 @@ defmodule LocalLedger.BatchSocket do
             end)
             
             send(ws_pid, :processing_done)
-          catch
-            :timeout ->
-              Logger.error("Processing stopped due to timeout")
           rescue
             e ->
               Logger.error("Error in batch processing task: #{inspect(e)}")
               Logger.error(Exception.format_stacktrace(__STACKTRACE__))
               send(ws_pid, {:error, "An error occurred during processing. Please try again."})
+          catch
+            :timeout ->
+              Logger.error("Processing stopped due to timeout")
           end
         end)
         
