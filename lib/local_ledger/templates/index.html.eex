@@ -72,12 +72,17 @@
           
           if (data.type === 'progress') {
             statusDiv.textContent = 'Processing batch ' + data.current + ' of ' + data.total + '...';
+            statusDiv.style.color = '#858585';
           } else if (data.type === 'chunk') {
             responseDiv.textContent += data.text;
             ledgerContent += data.text;
           } else if (data.type === 'done') {
             statusDiv.textContent = 'All batches completed!';
+            statusDiv.style.color = '#858585';
             downloadBtn.style.display = 'inline-block';
+          } else if (data.type === 'error') {
+            statusDiv.textContent = 'Error: ' + data.message;
+            statusDiv.style.color = '#f48771';
           }
         };
 

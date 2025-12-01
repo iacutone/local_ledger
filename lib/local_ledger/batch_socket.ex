@@ -40,14 +40,30 @@ defmodule LocalLedger.BatchSocket do
                 send(ws_pid, {:batch_separator})
               end
               
-              LocalLedger.OllamaClient.stream_batch_to_pid(batch, ws_pid)
+              # Process batch with timeout
+              task = Task.async(fn ->
+                LocalLedger.OllamaClient.stream_batch_to_pid(batch, ws_pid)
+              end)
+              
+              case Task.yield(task, 30_000) || Task.shutdown(task) do
+                {:ok, _result} ->
+                  :ok
+                nil ->
+                  Logger.error("Batch #{index} timed out after 30 seconds")
+                  send(ws_pid, {:error, "Ollama server not responding. Please try again later."})
+                  throw(:timeout)
+              end
             end)
             
             send(ws_pid, :processing_done)
+          catch
+            :timeout ->
+              Logger.error("Processing stopped due to timeout")
           rescue
             e ->
               Logger.error("Error in batch processing task: #{inspect(e)}")
               Logger.error(Exception.format_stacktrace(__STACKTRACE__))
+              send(ws_pid, {:error, "An error occurred during processing. Please try again."})
           end
         end)
         
@@ -79,6 +95,11 @@ defmodule LocalLedger.BatchSocket do
 
   def websocket_info(:processing_done, state) do
     msg = JSON.encode!(%{type: "done"})
+    {:reply, {:text, msg}, state}
+  end
+
+  def websocket_info({:error, message}, state) do
+    msg = JSON.encode!(%{type: "error", message: message})
     {:reply, {:text, msg}, state}
   end
 
