@@ -20,12 +20,48 @@
     <script defer data-domain="local-ledger.com" src="https://plausible.iacutone.synology.me/js/script.js"></script>
   </head>
   <body>
-    <h1>Upload CSV</h1>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem;">
+      <h1 style="margin:0;">Upload Credit Card CSV</h1>
+      <button onclick="openAboutModal()" style="background:#858585;">About</button>
+    </div>
+    
     <input type="file" id="csvFile" accept=".csv" />
     <button onclick="uploadFile()">Upload & Process</button>
     <div id="status" class="status"></div>
     <button id="downloadBtn" style="display:none;margin-top:1rem;" onclick="downloadLedger()">Download Ledger</button>
     <div id="response" class="response" style="display:none;"></div>
+
+    <!-- About Modal -->
+    <div id="aboutModal" class="modal" style="display:none;">
+      <div class="modal-content">
+        <span class="close" onclick="closeAboutModal()">&times;</span>
+        <h2>About Local Ledger</h2>
+        <p>Local Ledger is a tool that converts bank CSV transaction files into plain text ledger format using AI.</p>
+        
+        <h3>Why Plain Text Accounting?</h3>
+        <p>Plain text accounting offers several advantages:</p>
+        <ul>
+          <li><strong>Privacy:</strong> Your financial data stays on your machine</li>
+          <li><strong>Portability:</strong> Text files work everywhere, forever</li>
+          <li><strong>Version Control:</strong> Track changes with git</li>
+          <li><strong>Flexibility:</strong> Use any text editor or tool</li>
+        </ul>
+
+        <h3>How It Works</h3>
+        <p>Upload your bank's CSV export, and Local Ledger uses a local AI model (Ollama) to:</p>
+        <ol>
+          <li>Parse transaction data</li>
+          <li>Categorize expenses intelligently</li>
+          <li>Format entries in ledger-cli format</li>
+          <li>Clean merchant names</li>
+        </ol>
+
+        <h3>Privacy First</h3>
+        <p>All processing happens on my server. I will neither store nor view any of your personal data.</p>
+
+        <p style="margin-top:2rem;"><a href="https://thoughts.iacut.one/local-ledger/" target="_blank" style="color:#4ec9b0;">Read more on the blog →</a></p>
+      </div>
+    </div>
 
     <script>
       let ledgerContent = '';
@@ -107,16 +143,41 @@
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       }
+
+      function openAboutModal() {
+        document.getElementById('aboutModal').style.display = 'block';
+      }
+
+      function closeAboutModal() {
+        document.getElementById('aboutModal').style.display = 'none';
+      }
+
+      window.onclick = function(event) {
+        const modal = document.getElementById('aboutModal');
+        if (event.target == modal) {
+          closeAboutModal();
+        }
+      }
     </script>
 
     <style>
       body{font-family:sans-serif;padding:2rem;max-width:1200px;margin:0 auto;background:#1e1e1e;color:#d4d4d4}
       h1{color:#4ec9b0}
+      h2{color:#4ec9b0;margin-top:0}
+      h3{color:#6ed9c0;font-size:1.1rem;margin-top:1.5rem}
       .status{color:#858585;margin:1rem 0}
       .response{white-space:pre;background:#252526;padding:1.5rem;border-radius:8px;margin-top:1rem;font-family:Monaco,monospace;font-size:14px;line-height:1.6;overflow-x:auto;border:1px solid #3e3e42}
       button{background:#4ec9b0;color:#1e1e1e;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;font-size:16px}
       button:hover{background:#6ed9c0}
       input[type="file"]{margin-right:1rem}
+      a{color:#4ec9b0;text-decoration:none}
+      a:hover{text-decoration:underline}
+      ul,ol{line-height:1.8}
+      
+      .modal{position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;overflow:auto;background-color:rgba(0,0,0,0.7)}
+      .modal-content{background-color:#252526;margin:5% auto;padding:2rem;border:1px solid #3e3e42;border-radius:8px;width:80%;max-width:700px;max-height:80vh;overflow-y:auto}
+      .close{color:#858585;float:right;font-size:28px;font-weight:bold;cursor:pointer;line-height:20px}
+      .close:hover,.close:focus{color:#d4d4d4}
     </style>
 
   </body>
