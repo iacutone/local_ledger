@@ -17,6 +17,13 @@
     <meta property="og:description" content="Convert bank CSV transactions to ledger format using AI">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://local-ledger.com/">
+    <meta property="og:image" content="https://local-ledger.com/og-image.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Local Ledger - Convert Bank CSV to Ledger Format">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://local-ledger.com/og-image.png">
     <script defer data-domain="local-ledger.com" src="https://plausible.iacutone.synology.me/js/script.js"></script>
   </head>
   <body>
