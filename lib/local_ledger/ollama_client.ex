@@ -2,7 +2,6 @@ defmodule LocalLedger.OllamaClient do
   @moduledoc """
   Client for interacting with Ollama API with streaming support.
   """
-  require Logger
 
   @ollama_model "ledger"
 
@@ -80,8 +79,7 @@ defmodule LocalLedger.OllamaClient do
               {:ok, %{"response" => resp}} when is_binary(resp) ->
                 case Plug.Conn.chunk(acc_conn, resp) do
                   {:ok, new_conn} -> new_conn
-                  {:error, reason} ->
-                    Logger.error("Chunk error: #{inspect(reason)}")
+                  {:error, _reason} ->
                     acc_conn
                 end
               _ -> acc_conn
@@ -99,8 +97,7 @@ defmodule LocalLedger.OllamaClient do
     case result do
       {:ok, {final_conn, _buffer}} -> 
         final_conn
-      {:error, reason} -> 
-        Logger.error("Stream error: #{inspect(reason)}")
+      {:error, _reason} -> 
         conn
     end
   end
@@ -118,13 +115,9 @@ defmodule LocalLedger.OllamaClient do
         [] -> {"", []}
       end
 
-    batches =
-      data_lines
-      |> Enum.chunk_every(10)
-      |> Enum.map(fn batch -> [header | batch] |> Enum.join("\n") end)
-
-    Logger.info("Split into #{length(batches)} batches (#{length(data_lines)} transactions)")
-    batches
+    data_lines
+    |> Enum.chunk_every(10)
+    |> Enum.map(fn batch -> [header | batch] |> Enum.join("\n") end)
   end
 
   @doc """
