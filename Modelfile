@@ -46,11 +46,13 @@ YYYY/MM/DD Merchant Name
 - → Expenses:Banking (for fees) or Assets:Cash (for ATM/deposit)
 
 ### Gas & Transportation
-- Contains: SHELL, EXXON, BP, CHEVRON, MOBIL, TEXACO, CITGO, SUNOCO, ARCO, 7-ELEVEN FUEL
-- Contains: GAS STATION, PETRO, FUEL, PUMP
-- Contains: UBER, LYFT, TAXI, CAB, RIDESHARE
-- Contains: METRO, SUBWAY (transit), TRAIN, BUS, AMTRAK
-- → Expenses:Transportation
+- GAS: SHELL, EXXON, BP, CHEVRON, MOBIL, TEXACO, CITGO, SUNOCO, ARCO, 7-ELEVEN FUEL, GAS STATION, PETRO, FUEL, PUMP
+  → Expenses:Transportation:Gas
+- RIDESHARE: UBER, LYFT, TAXI, CAB, RIDESHARE
+  → Expenses:Transportation:Rideshare
+- PUBLIC TRANSIT: METRO, SUBWAY (transit), TRAIN, BUS, AMTRAK
+  → Expenses:Transportation:Transit
+- Default: → Expenses:Transportation
 
 ### Auto & Vehicle
 - Contains: AUTO, CAR, VEHICLE, MECHANIC, GARAGE, REPAIR, SERVICE
@@ -59,11 +61,15 @@ YYYY/MM/DD Merchant Name
 - → Expenses:Auto
 
 ### Food & Restaurants
-- Contains: RESTAURANT, CAFE, COFFEE, TEA, PIZZA, BURGER, TACO, DELI, BAKERY, DONUT, GRILL
-- Contains: MCDONALD, MCDONALDS, BURGER KING, SUBWAY, STARBUCKS, DUNKIN, KFC, TACO BELL, CHIPOTLE, PANERA, CHICK-FIL-A, WENDY'S
-- Contains: SQ *, TST*, TOAST, CLOVER*, GRUBHUB, DOORDASH, UBER EATS, POSTMATES
-- Contains: SUPERMARKET, GROCERY, MARKET, FOOD, KROGER, SAFEWAY, PUBLIX, MEIJER, H-E-B, ALBERTSONS, TRADER JOE'S, WHOLE FOODS, FRESH MARKET, STOP & SHOP, GIANT, WEIS, WINN-DIXIE, WEGMANS, FRYS
-- → Expenses:Food
+- RESTAURANTS: RESTAURANT, CAFE, PIZZA, BURGER, TACO, DELI, GRILL, MCDONALD, BURGER KING, KFC, TACO BELL, CHIPOTLE, PANERA, CHICK-FIL-A, WENDY'S, SQ *, TST*, TOAST, CLOVER*
+  → Expenses:Food:Restaurant
+- COFFEE SHOPS: COFFEE, STARBUCKS, DUNKIN, CAFE
+  → Expenses:Food:Coffee
+- DELIVERY: GRUBHUB, DOORDASH, UBER EATS, POSTMATES
+  → Expenses:Food:Delivery
+- GROCERIES: SUPERMARKET, GROCERY, MARKET, KROGER, SAFEWAY, PUBLIX, MEIJER, H-E-B, ALBERTSONS, TRADER JOE'S, WHOLE FOODS, FRESH MARKET, STOP & SHOP, GIANT, WEIS, WINN-DIXIE, WEGMANS, FRYS
+  → Expenses:Food:Groceries
+- Default: → Expenses:Food
 
 ### Entertainment
 - Contains: MOVIE, THEATER, CINEMA, NETFLIX, SPOTIFY, HULU, DISNEY, MAX
@@ -72,11 +78,14 @@ YYYY/MM/DD Merchant Name
 - → Expenses:Entertainment
 
 ### Shopping & Retail
-- Contains: WALMART, TARGET, COSTCO, SAM'S CLUB, BJ'S WHOLESALE
-- Contains: AMAZON, AMZN, EBAY, ETSY
-- Contains: STORE, SHOP, RETAIL, MALL, OUTLET, DEPOT
-- Contains: CLOTHING, APPAREL, FASHION, NIKE, ADIDAS, GAP, OLD NAVY, UNIQLO
-- → Expenses:Shopping
+- ONLINE: AMAZON, AMZN, EBAY, ETSY
+  → Expenses:Shopping:Online
+- WAREHOUSE: WALMART, TARGET, COSTCO, SAM'S CLUB, BJ'S WHOLESALE
+  → Expenses:Shopping:Warehouse
+- CLOTHING: CLOTHING, APPAREL, FASHION, NIKE, ADIDAS, GAP, OLD NAVY, UNIQLO
+  → Expenses:Shopping:Clothing
+- Default: STORE, SHOP, RETAIL, MALL, OUTLET, DEPOT
+  → Expenses:Shopping
 
 ### Home & Garden
 - Contains: HOME DEPOT, LOWE'S, ACE HARDWARE, TRUE VALUE, MENARDS
@@ -133,12 +142,12 @@ Rules:
 
 MESSAGE user "12/30/2019,12/31/2019,SQ *GLEN EDITH COFFEE,Food & Drink,Sale,-22.13"
 MESSAGE assistant """2019/12/30 SQ *Glen Edith Coffee
-  Expenses:Food               $22.13
+  Expenses:Food:Coffee        $22.13
   ACCOUNT_TYPE                $-22.13"""
 
 MESSAGE user "01/05/2020,01/05/2020,SHELL OIL #1234567,Gas,Sale,-45.30"
 MESSAGE assistant """2020/01/05 Shell Oil #1234567
-  Expenses:Transportation     $45.30
+  Expenses:Transportation:Gas $45.30
   ACCOUNT_TYPE                $-45.30"""
 
 MESSAGE user "11/19/2019,11/19/2019,AUTOMATIC PAYMENT - THANK,,Payment,2975.86"
@@ -149,7 +158,7 @@ MESSAGE assistant """2019/11/19 Automatic Payment - Thank
 MESSAGE user "Date,Description,Amount
 03/15/2020,WHOLE FOODS MARKET,-89.45"
 MESSAGE assistant """2020/03/15 Whole Foods Market
-  Expenses:Food               $89.45
+  Expenses:Food:Groceries     $89.45
   ACCOUNT_TYPE                $-89.45"""
 
 MESSAGE user "Posted Date,Payee,Amount
