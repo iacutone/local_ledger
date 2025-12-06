@@ -29,7 +29,10 @@
   <body>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem;">
       <h1 style="margin:0;">Upload Credit Card CSV</h1>
-      <button onclick="openAboutModal()" style="background:#858585;">About</button>
+      <div>
+        <button onclick="openInstructionsModal()" style="background:#858585;margin-right:0.5rem;">Instructions</button>
+        <button onclick="openAboutModal()" style="background:#858585;">About</button>
+      </div>
     </div>
     
     <input type="file" id="csvFile" accept=".csv" />
@@ -37,6 +40,32 @@
     <div id="status" class="status"></div>
     <button id="downloadBtn" style="display:none;margin-top:1rem;" onclick="downloadLedger()">Download Ledger</button>
     <div id="response" class="response" style="display:none;"></div>
+
+    <!-- Instructions Modal -->
+    <div id="instructionsModal" class="modal" style="display:none;">
+      <div class="modal-content">
+        <span class="close" onclick="closeInstructionsModal()">&times;</span>
+        <h2>Instructions</h2>
+        
+        <h3>How to Use</h3>
+        <ol>
+          <li>Download your credit card or bank statement as a CSV file</li>
+          <li>Click "Choose File" and select your CSV</li>
+          <li>Click "Upload & Process" to convert to ledger format</li>
+          <li>Download the resulting ledger file</li>
+        </ol>
+
+        <h3>Supported Banks</h3>
+        <p>This tool is optimized for <strong>Chase credit card</strong> CSV exports. Other banks may work but results may vary.</p>
+
+        <h3>Need Help?</h3>
+        <p>If you encounter any issues or would like to add support for your bank's CSV format, please reach out:</p>
+        <p style="margin-top:1rem;">
+          <a href="mailto:iacutone@protonmail.com" style="color:#4ec9b0;">iacutone@protonmail.com</a>
+        </p>
+        <p style="color:#858585;font-size:0.9rem;margin-top:1rem;">Include a sample of your CSV headers (without personal data) and I'll work on extending the model to support it.</p>
+      </div>
+    </div>
 
     <!-- About Modal -->
     <div id="aboutModal" class="modal" style="display:none;">
@@ -159,10 +188,22 @@
         document.getElementById('aboutModal').style.display = 'none';
       }
 
+      function openInstructionsModal() {
+        document.getElementById('instructionsModal').style.display = 'block';
+      }
+
+      function closeInstructionsModal() {
+        document.getElementById('instructionsModal').style.display = 'none';
+      }
+
       window.onclick = function(event) {
-        const modal = document.getElementById('aboutModal');
-        if (event.target == modal) {
+        const aboutModal = document.getElementById('aboutModal');
+        const instructionsModal = document.getElementById('instructionsModal');
+        if (event.target == aboutModal) {
           closeAboutModal();
+        }
+        if (event.target == instructionsModal) {
+          closeInstructionsModal();
         }
       }
     </script>
