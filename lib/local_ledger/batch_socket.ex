@@ -6,10 +6,10 @@ defmodule LocalLedger.BatchSocket do
     {:cowboy_websocket, req, state, %{idle_timeout: 600_000}}
   end
 
-  def websocket_init(state) do
+  def websocket_init(_state) do
     # Send periodic pings to keep connection alive
     :timer.send_interval(30_000, self(), :ping)
-    {:ok, state}
+    {:ok, %{chunks_received: false}}
   end
 
   def websocket_handle({:text, msg}, state) do
@@ -70,7 +70,7 @@ defmodule LocalLedger.BatchSocket do
 
   def websocket_info({:chunk, text}, state) do
     msg = JSON.encode!(%{type: "chunk", text: text})
-    {:reply, {:text, msg}, state}
+    {:reply, {:text, msg}, %{state | chunks_received: true}}
   end
 
   def websocket_info({:batch_separator}, state) do
@@ -84,8 +84,13 @@ defmodule LocalLedger.BatchSocket do
   end
 
   def websocket_info(:processing_done, state) do
-    msg = JSON.encode!(%{type: "done"})
-    {:reply, {:text, msg}, state}
+    if state.chunks_received do
+      msg = JSON.encode!(%{type: "done"})
+      {:reply, {:text, msg}, %{state | chunks_received: false}}
+    else
+      msg = JSON.encode!(%{type: "error", message: "The AI model returned no data. It may be warming up - please try again in a few seconds."})
+      {:reply, {:text, msg}, state}
+    end
   end
 
   def websocket_info({:error, message}, state) do
