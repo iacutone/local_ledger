@@ -15,50 +15,48 @@ defmodule LocalLedger.BatchSocket do
   def websocket_handle({:text, msg}, state) do
     case JSON.decode(msg) do
       {:ok, %{"action" => "process", "csv_content" => csv_content}} ->
-        # Get WebSocket PID before spawning
-        ws_pid = self()
-        
-        # Spawn a task to handle processing
-        Task.start(fn ->
-          try do
-            # Parse CSV content to get batches
-            batches = LocalLedger.OllamaClient.parse_csv_and_prepare_batches(csv_content)
-            
-            Enum.with_index(batches, 1)
-            |> Enum.each(fn {batch, index} ->
-              send(ws_pid, {:batch_progress, index, length(batches)})
-              
-              if index > 1 do
-                Process.sleep(2000)
-                send(ws_pid, {:batch_separator})
-              end
-              
-              # Process batch with timeout
-              task = Task.async(fn ->
-                LocalLedger.OllamaClient.stream_batch_to_pid(batch, ws_pid)
-              end)
-              
-              case Task.yield(task, 30_000) || Task.shutdown(task) do
-                {:ok, _result} ->
+        {:ok, Map.put(state, :pending_csv, csv_content)}
+
+      {:ok, %{"action" => "ready"}} ->
+        case Map.get(state, :pending_csv) do
+          nil ->
+            {:ok, state}
+
+          csv_content ->
+            ws_pid = self()
+
+            Task.start(fn ->
+              try do
+                batches = LocalLedger.OllamaClient.parse_csv_and_prepare_batches(csv_content)
+
+                total_batches = length(batches)
+                
+                Enum.with_index(batches, 1)
+                |> Enum.each(fn {batch, index} ->
+                  send(ws_pid, {:batch_progress, index, total_batches})
+
+                  if index > 1 do
+                    Process.sleep(2000)
+                    send(ws_pid, {:batch_separator})
+                  end
+
+                  # Call directly - streaming sends chunks as they arrive
+                  LocalLedger.OllamaClient.stream_batch_to_pid(batch, ws_pid)
+                end)
+
+                send(ws_pid, :processing_done)
+              rescue
+                _e ->
+                  send(ws_pid, {:error, "An error occurred during processing. Please try again."})
+              catch
+                :timeout ->
                   :ok
-                nil ->
-                  send(ws_pid, {:error, "Ollama server not responding. Please try again later."})
-                  throw(:timeout)
               end
             end)
-            
-            send(ws_pid, :processing_done)
-          rescue
-            _e ->
-              send(ws_pid, {:error, "An error occurred during processing. Please try again."})
-          catch
-            :timeout ->
-              :ok
-          end
-        end)
-        
-        {:ok, state}
-      
+
+            {:ok, Map.delete(state, :pending_csv)}
+        end
+
       _ ->
         {:ok, state}
     end
@@ -68,9 +66,14 @@ defmodule LocalLedger.BatchSocket do
     {:ok, state}
   end
 
-  def websocket_info({:chunk, text}, state) do
+  def websocket_info({:chunk, text}, state) when text != "" do
     msg = JSON.encode!(%{type: "chunk", text: text})
     {:reply, {:text, msg}, %{state | chunks_received: true}}
+  end
+
+  def websocket_info({:chunk, ""}, state) do
+    # Ignore empty chunks
+    {:ok, state}
   end
 
   def websocket_info({:batch_separator}, state) do
@@ -88,7 +91,13 @@ defmodule LocalLedger.BatchSocket do
       msg = JSON.encode!(%{type: "done"})
       {:reply, {:text, msg}, %{state | chunks_received: false}}
     else
-      msg = JSON.encode!(%{type: "error", message: "The AI model returned no data. It may be warming up - please try again in a few seconds."})
+      msg =
+        JSON.encode!(%{
+          type: "error",
+          message:
+            "The AI model returned no data. It may be warming up - please try again in a few seconds."
+        })
+
       {:reply, {:text, msg}, state}
     end
   end

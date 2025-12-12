@@ -132,14 +132,6 @@
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
 
-        ws.onopen = function() {
-          statusDiv.textContent = 'Connected. Processing...';
-          ws.send(JSON.stringify({
-            action: 'process',
-            csv_content: csvContent
-          }));
-        };
-
         ws.onmessage = function(event) {
           const data = JSON.parse(event.data);
           
@@ -147,8 +139,10 @@
             statusDiv.textContent = 'Processing batch ' + data.current + ' of ' + data.total + '...';
             statusDiv.style.color = '#858585';
           } else if (data.type === 'chunk') {
-            responseDiv.textContent += data.text;
-            ledgerContent += data.text;
+            if (data.text) {
+              responseDiv.textContent += data.text;
+              ledgerContent += data.text;
+            }
           } else if (data.type === 'done') {
             statusDiv.textContent = 'All batches completed!';
             statusDiv.style.color = '#858585';
@@ -157,6 +151,17 @@
             statusDiv.textContent = 'Error: ' + data.message;
             statusDiv.style.color = '#f48771';
           }
+        };
+
+        ws.onopen = function() {
+          statusDiv.textContent = 'Connected. Processing...';
+          // Send CSV content first
+          ws.send(JSON.stringify({
+            action: 'process',
+            csv_content: csvContent
+          }));
+          // Then signal ready to start processing
+          ws.send(JSON.stringify({ action: 'ready' }));
         };
 
         ws.onerror = function(error) {

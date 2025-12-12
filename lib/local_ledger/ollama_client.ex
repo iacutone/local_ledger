@@ -20,7 +20,7 @@ defmodule LocalLedger.OllamaClient do
 
     headers = [{"content-type", "application/json"}]
 
-    Finch.build(:post, url, headers, body)
+    result = Finch.build(:post, url, headers, body)
     |> Finch.stream(LocalLedger.Finch, "", fn
       {:data, data}, buffer ->
         new_buffer = buffer <> data
@@ -36,7 +36,9 @@ defmodule LocalLedger.OllamaClient do
         Enum.each(complete_lines, fn line ->
           if line != "" do
             case JSON.decode(line) do
-              {:ok, %{"response" => resp}} when is_binary(resp) ->
+              {:ok, %{"response" => resp, "done" => false}} when is_binary(resp) and resp != "" ->
+                send(pid, {:chunk, resp})
+              {:ok, %{"response" => resp}} when is_binary(resp) and resp != "" ->
                 send(pid, {:chunk, resp})
               _ -> :ok
             end
@@ -47,6 +49,17 @@ defmodule LocalLedger.OllamaClient do
 
       _, buffer -> buffer
     end)
+
+    # Process any remaining buffer content
+    case result do
+      {:ok, remaining_buffer} when remaining_buffer != "" ->
+        case JSON.decode(remaining_buffer) do
+          {:ok, %{"response" => resp}} when is_binary(resp) ->
+            send(pid, {:chunk, resp})
+          _ -> :ok
+        end
+      _ -> :ok
+    end
   end
 
   def stream_batch_to_conn(content, conn) do
