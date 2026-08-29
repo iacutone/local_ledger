@@ -9,6 +9,67 @@ defmodule LocalLedger.OllamaClient do
     Application.get_env(:local_ledger, :ollama_base_url, "http://localhost:11434")
   end
 
+  def generate(content) do
+    url = "#{base_url()}/api/generate"
+
+    body =
+      JSON.encode!(%{
+        model: @ollama_model,
+        prompt: content,
+        stream: true
+      })
+
+    headers = [{"content-type", "application/json"}]
+
+    result =
+      Finch.build(:post, url, headers, body)
+      |> Finch.stream(LocalLedger.Finch, %{buffer: "", collected: ""}, fn
+        {:data, data}, acc ->
+          new_buffer = acc.buffer <> data
+          lines = String.split(new_buffer, "\n")
+
+          {complete_lines, remaining} =
+            if length(lines) > 1 do
+              {Enum.take(lines, length(lines) - 1), List.last(lines)}
+            else
+              {[], new_buffer}
+            end
+
+          collected =
+            Enum.reduce(complete_lines, acc.collected, fn line, col ->
+              case decode_response(line) do
+                {:ok, resp} -> col <> resp
+                :skip -> col
+              end
+            end)
+
+          %{buffer: remaining, collected: collected}
+
+        _, acc ->
+          acc
+      end)
+
+    case result do
+      {:ok, acc} ->
+        case decode_response(acc.buffer) do
+          {:ok, resp} -> acc.collected <> resp
+          :skip -> acc.collected
+        end
+
+      {:error, _reason} ->
+        ""
+    end
+  end
+
+  defp decode_response(""), do: :skip
+
+  defp decode_response(line) do
+    case JSON.decode(line) do
+      {:ok, %{"response" => resp}} when is_binary(resp) and resp != "" -> {:ok, resp}
+      _ -> :skip
+    end
+  end
+
   def stream_batch_to_pid(content, pid) do
     url = "#{base_url()}/api/generate"
 

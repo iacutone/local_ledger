@@ -38,7 +38,13 @@
     <input type="file" id="csvFile" accept=".csv" />
     <button onclick="uploadFile()">Upload & Process</button>
     <div id="status" class="status"></div>
-    <button id="downloadBtn" style="display:none;margin-top:1rem;" onclick="downloadLedger()">Download Ledger</button>
+    <button id="downloadBtn" style="display:none;margin-top:1rem;" onclick="downloadLedger()">Download Journal</button>
+    <div id="reports" style="display:none;">
+      <h2>Account balances</h2>
+      <div id="balance" class="response"></div>
+      <h2 style="margin-top:2rem;">Register</h2>
+      <div id="register" class="response"></div>
+    </div>
     <div id="response" class="response" style="display:none;"></div>
 
     <!-- Instructions Modal -->
@@ -51,8 +57,8 @@
         <ol>
           <li>Download your credit card or bank statement as a CSV file</li>
           <li>Click "Choose File" and select your CSV</li>
-          <li>Click "Upload & Process" to convert to ledger format</li>
-          <li>Download the resulting ledger file</li>
+          <li>Click "Upload & Process" to convert and run <code>ledger balance</code> / <code>ledger register</code></li>
+          <li>Download the journal file if you want to keep it</li>
         </ol>
 
         <h3>Supported Banks</h3>
@@ -84,13 +90,7 @@
         </ul>
 
         <h3>How It Works</h3>
-        <p>Upload your bank's CSV export, and Local Ledger uses a local AI model (Ollama) to:</p>
-        <ol>
-          <li>Parse transaction data</li>
-          <li>Categorize expenses intelligently</li>
-          <li>Format entries in ledger-cli format</li>
-          <li>Clean merchant names</li>
-        </ol>
+        <p>Upload your bank's CSV export, and Local Ledger uses a local AI model (Ollama) to convert it to a ledger journal, then runs <a href="https://ledger-cli.org/doc/ledger3.html#Structuring-your-Accounts" target="_blank" style="color:#4ec9b0;">ledger-cli</a> to show account balances and a register.</p>
 
         <h3>Privacy First</h3>
         <p>All processing happens on my server. I will neither store nor view any of your personal data.</p>
@@ -121,11 +121,17 @@
       function processWithWebSocket(csvContent, filename) {
         const statusDiv = document.getElementById('status');
         const responseDiv = document.getElementById('response');
+        const reportsDiv = document.getElementById('reports');
+        const balanceDiv = document.getElementById('balance');
+        const registerDiv = document.getElementById('register');
         const downloadBtn = document.getElementById('downloadBtn');
         
         statusDiv.textContent = 'Connecting...';
-        responseDiv.style.display = 'block';
+        responseDiv.style.display = 'none';
         responseDiv.textContent = '';
+        reportsDiv.style.display = 'none';
+        balanceDiv.textContent = '';
+        registerDiv.textContent = '';
         downloadBtn.style.display = 'none';
         ledgerContent = '';
 
@@ -138,15 +144,26 @@
           if (data.type === 'progress') {
             statusDiv.textContent = 'Processing batch ' + data.current + ' of ' + data.total + '...';
             statusDiv.style.color = '#858585';
-          } else if (data.type === 'chunk') {
-            if (data.text) {
-              responseDiv.textContent += data.text;
-              ledgerContent += data.text;
-            }
-          } else if (data.type === 'done') {
-            statusDiv.textContent = 'All batches completed!';
+          } else if (data.type === 'progress_message') {
+            statusDiv.textContent = data.message;
             statusDiv.style.color = '#858585';
+          } else if (data.type === 'report') {
+            statusDiv.textContent = 'Done';
+            statusDiv.style.color = '#858585';
+            reportsDiv.style.display = 'block';
+            balanceDiv.textContent = data.balance || '(no balances)';
+            registerDiv.textContent = data.register || '(empty register)';
+            ledgerContent = data.journal || '';
             downloadBtn.style.display = 'inline-block';
+          } else if (data.type === 'report_error') {
+            statusDiv.textContent = 'ledger: ' + data.message;
+            statusDiv.style.color = '#f48771';
+            ledgerContent = data.journal || '';
+            if (ledgerContent) {
+              responseDiv.style.display = 'block';
+              responseDiv.textContent = ledgerContent;
+              downloadBtn.style.display = 'inline-block';
+            }
           } else if (data.type === 'error') {
             statusDiv.textContent = 'Error: ' + data.message;
             statusDiv.style.color = '#f48771';
@@ -179,7 +196,7 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'ledger.txt';
+        a.download = 'journal.ledger';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -217,7 +234,7 @@
     <style>
       body{font-family:sans-serif;padding:2rem;max-width:1200px;margin:0 auto;background:#1e1e1e;color:#d4d4d4}
       h1{color:#4ec9b0}
-      h2{color:#4ec9b0;margin-top:0}
+      h2{color:#4ec9b0;margin-top:2rem}
       h3{color:#6ed9c0;font-size:1.1rem;margin-top:1.5rem}
       .status{color:#858585;margin:1rem 0}
       .response{white-space:pre;background:#252526;padding:1.5rem;border-radius:8px;margin-top:1rem;font-family:Monaco,monospace;font-size:14px;line-height:1.6;overflow-x:auto;border:1px solid #3e3e42}

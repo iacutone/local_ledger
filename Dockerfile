@@ -35,7 +35,7 @@ RUN mix compile
 FROM ${RUNNER_IMAGE}
 
 RUN apt-get update -y && \
-    apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates git && \
+    apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates git ledger && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
     locale-gen

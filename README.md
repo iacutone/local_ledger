@@ -6,8 +6,9 @@
 
 ## Dependencies
 
-- [Ollama](https://ollama.com/))
+- [Ollama](https://ollama.com/)
 - Elixir (via [asdf](https://asdf-vm.com/))
+- [ledger-cli](https://ledger-cli.org/) (`brew install ledger` or `apt install ledger`)
 - [ngrok](https://ngrok.com/) tunnel
 
 

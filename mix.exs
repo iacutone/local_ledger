@@ -7,6 +7,7 @@ defmodule LocalLedger.MixProject do
       version: "0.1.0",
       elixir: "~> 1.16",
       start_permanent: Mix.env() == :prod,
+      aliases: aliases(),
       deps: deps()
     ]
   end
@@ -15,6 +16,12 @@ defmodule LocalLedger.MixProject do
     [
       mod: {LocalLedger.Application, []},
       extra_applications: [:logger]
+    ]
+  end
+
+  defp aliases do
+    [
+      test: "test --no-start"
     ]
   end
 

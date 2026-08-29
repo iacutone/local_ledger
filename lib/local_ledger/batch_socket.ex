@@ -7,9 +7,8 @@ defmodule LocalLedger.BatchSocket do
   end
 
   def websocket_init(_state) do
-    # Send periodic pings to keep connection alive
     :timer.send_interval(30_000, self(), :ping)
-    {:ok, %{chunks_received: false}}
+    {:ok, %{}}
   end
 
   def websocket_handle({:text, msg}, state) do
@@ -32,31 +31,44 @@ defmodule LocalLedger.BatchSocket do
             Task.start(fn ->
               try do
                 batches = LocalLedger.OllamaClient.parse_csv_and_prepare_batches(csv_content)
-
                 total_batches = length(batches)
 
-                Enum.with_index(batches, 1)
-                |> Enum.each(fn {batch, index} ->
-                  send(ws_pid, {:batch_progress, index, total_batches})
+                journal =
+                  Enum.with_index(batches, 1)
+                  |> Enum.map(fn {batch, index} ->
+                    send(ws_pid, {:batch_progress, index, total_batches})
 
-                  if index > 1 do
-                    Process.sleep(2000)
-                    send(ws_pid, {:batch_separator})
-                  end
-
-                  prompt =
-                    case filename do
-                      name when is_binary(name) and name != "" ->
-                        "Filename: #{name}\n\n#{batch}"
-
-                      _ ->
-                        batch
+                    if index > 1 do
+                      Process.sleep(2000)
                     end
 
-                  LocalLedger.OllamaClient.stream_batch_to_pid(prompt, ws_pid)
-                end)
+                    prompt =
+                      case filename do
+                        name when is_binary(name) and name != "" ->
+                          "Filename: #{name}\n\n#{batch}"
 
-                send(ws_pid, :processing_done)
+                        _ ->
+                          batch
+                      end
+
+                    LocalLedger.OllamaClient.generate(prompt)
+                  end)
+                  |> Enum.reject(&(&1 == ""))
+                  |> Enum.join("\n\n")
+
+                if String.trim(journal) == "" do
+                  send(ws_pid, {:error, "The AI model returned no data. It may be warming up - please try again in a few seconds."})
+                else
+                  send(ws_pid, {:running_ledger})
+
+                  case LocalLedger.LedgerCli.reports(journal) do
+                    {:ok, reports} ->
+                      send(ws_pid, {:report, reports, journal})
+
+                    {:error, message} ->
+                      send(ws_pid, {:report_error, message, journal})
+                  end
+                end
               rescue
                 _e ->
                   send(ws_pid, {:error, "An error occurred during processing. Please try again."})
@@ -78,40 +90,37 @@ defmodule LocalLedger.BatchSocket do
     {:ok, state}
   end
 
-  def websocket_info({:chunk, text}, state) when text != "" do
-    msg = JSON.encode!(%{type: "chunk", text: text})
-    {:reply, {:text, msg}, %{state | chunks_received: true}}
-  end
-
-  def websocket_info({:chunk, ""}, state) do
-    # Ignore empty chunks
-    {:ok, state}
-  end
-
-  def websocket_info({:batch_separator}, state) do
-    msg = JSON.encode!(%{type: "chunk", text: "\n\n"})
-    {:reply, {:text, msg}, state}
-  end
-
   def websocket_info({:batch_progress, current, total}, state) do
     msg = JSON.encode!(%{type: "progress", current: current, total: total})
     {:reply, {:text, msg}, state}
   end
 
-  def websocket_info(:processing_done, state) do
-    if state.chunks_received do
-      msg = JSON.encode!(%{type: "done"})
-      {:reply, {:text, msg}, %{state | chunks_received: false}}
-    else
-      msg =
-        JSON.encode!(%{
-          type: "error",
-          message:
-            "The AI model returned no data. It may be warming up - please try again in a few seconds."
-        })
+  def websocket_info({:running_ledger}, state) do
+    msg = JSON.encode!(%{type: "progress_message", message: "Running ledger…"})
+    {:reply, {:text, msg}, state}
+  end
 
-      {:reply, {:text, msg}, state}
-    end
+  def websocket_info({:report, reports, journal}, state) do
+    msg =
+      JSON.encode!(%{
+        type: "report",
+        balance: reports.balance,
+        register: reports.register,
+        journal: journal
+      })
+
+    {:reply, {:text, msg}, state}
+  end
+
+  def websocket_info({:report_error, message, journal}, state) do
+    msg =
+      JSON.encode!(%{
+        type: "report_error",
+        message: message,
+        journal: journal
+      })
+
+    {:reply, {:text, msg}, state}
   end
 
   def websocket_info({:error, message}, state) do
