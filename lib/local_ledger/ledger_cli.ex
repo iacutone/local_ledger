@@ -47,9 +47,8 @@ defmodule LocalLedger.LedgerCli do
     try do
       File.write!(path, journal)
 
-      with {:ok, balance} <- run(bin, path, ["balance"]),
-           {:ok, register} <- run(bin, path, ["register"]) do
-        {:ok, %{balance: String.trim_trailing(balance), register: String.trim_trailing(register)}}
+      with {:ok, balance} <- run(bin, path, ["balance"]) do
+        {:ok, %{balance: String.trim_trailing(balance)}}
       end
     after
       File.rm(path)

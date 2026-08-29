@@ -105,7 +105,6 @@ defmodule LocalLedger.BatchSocket do
       JSON.encode!(%{
         type: "report",
         balance: reports.balance,
-        register: reports.register,
         journal: journal,
         download: download
       })
