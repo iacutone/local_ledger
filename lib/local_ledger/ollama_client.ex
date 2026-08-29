@@ -110,7 +110,7 @@ defmodule LocalLedger.OllamaClient do
         remaining
 
       _, buffer -> buffer
-    end, [receive_timeout: 120_000])
+    end, [receive_timeout: 300_000])
 
     # Process any remaining buffer content
     case result do
