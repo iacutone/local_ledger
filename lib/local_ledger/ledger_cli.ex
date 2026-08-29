@@ -21,6 +21,13 @@ defmodule LocalLedger.LedgerCli do
     end
   end
 
+  def download_name(journal, filename \\ nil) do
+    case last_four(journal, filename) do
+      four when is_binary(four) -> "credit-card#{four}.ledger"
+      _ -> "credit-card.ledger"
+    end
+  end
+
   defp executable(opts) do
     case Keyword.fetch(opts, :executable) do
       {:ok, path} when is_binary(path) ->
@@ -67,5 +74,18 @@ defmodule LocalLedger.LedgerCli do
     |> String.replace(~r/-\$(\d)/, "$-\\1")
     |> String.trim()
     |> Kernel.<>("\n")
+  end
+
+  defp last_four(journal, filename) do
+    cond do
+      match = Regex.run(~r/Liabilities:\s*Credit Card\s+(\d{4})/, journal || "") ->
+        List.last(match)
+
+      match = Regex.run(~r/^[A-Za-z]+(\d{4})/, Path.basename(filename || "")) ->
+        List.last(match)
+
+      true ->
+        nil
+    end
   end
 end

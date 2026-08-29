@@ -10,5 +10,7 @@ defmodule LocalLedger.RouterTest do
     assert conn.resp_body =~ "Account balances"
     assert conn.resp_body =~ "type === 'report'"
     refute conn.resp_body =~ "type === 'chunk'"
+    assert conn.resp_body =~ "data.download"
+    assert conn.resp_body =~ "ledgerFilename"
   end
 end

@@ -18,7 +18,7 @@ The CSV/TSV follows after a blank line. Columns may be tab-separated or comma-se
 - Merchant: "Description", "Merchant", "Payee", "Memo"
 - Amount: "Amount", "Debit", "Credit" (negative means expense)
 - Bank category: "Category" (optional hint)
-- Type: "Type" (Sale, Payment, Return, …)
+- Type: "Type" (Sale, Payment, Return, Adjustment, …)
 
 ## Output
 Use Post Date as the entry date (YYYY-MM-DD). Sort entries by that date ascending.
@@ -35,14 +35,20 @@ Accounts:
 - The credit card is Liabilities:Credit Card <last four> inferred from Filename
   (e.g. Chase1234_Activity.csv → Liabilities:Credit Card 1234)
 - Card payments post to that credit card account and Assets:Checking:Bank Account
-- Type Sale (or Return) is never a card payment, even if the description contains AUTO, *AUTO, or the bank Category is Bills & Utilities
+- Every entry has two postings so it balances. Never emit only a credit-card line.
+- Type Sale, Return, or Adjustment is never a card payment, even if the description contains AUTO, *AUTO, or the bank Category is Bills & Utilities
 
-Expenses (Type is Sale/Return, or a negative CSV amount). Put the signed amount on the credit card line:
+Expenses (Type is Sale, or a negative CSV amount). Put the signed amount on the credit card line:
 2019-12-23	12/23/2019; PAYPAL *EBAY SAVMYSERVER; Professional Services; Sale	;
 	Expenses:Books
 	Liabilities:Credit Card <last four>			-$3.19
 
-Payments (Type is Payment only, typically AUTOMATIC PAYMENT - THANK). Positive CSV amount. Do not treat GEICO *AUTO, *AUTO, AUTOZONE, or other merchants containing AUTO as payments:
+Refunds (Type is Return, Adjustment, Refund, or a positive CSV amount that is not Type Payment). Classify the merchant the same as a sale. Elide the expense amount. Put the positive amount on the credit card line:
+2019-11-06	11/05/2019; eBAY 0*04-13524-76776; Shopping; Adjustment	;
+	Expenses:Online Services:Ebay
+	Liabilities:Credit Card <last four>			$463.18
+
+Payments (Type is Payment only, typically AUTOMATIC PAYMENT - THANK). Positive CSV amount. Do not treat GEICO *AUTO, *AUTO, AUTOZONE, Adjustment, Return, or other merchants containing AUTO as payments:
 2019-12-22	12/22/2019; AUTOMATIC PAYMENT - THANK; Payment	;
 	Liabilities:Credit Card <last four>			 $3476.17
 	Assets:Checking:Bank Account
@@ -52,6 +58,7 @@ Payments (Type is Payment only, typically AUTOMATIC PAYMENT - THANK). Positive C
 Match the merchant description first. More specific rules beat generic ones (COSTCO is Groceries, not Shopping).
 
 ### Online
+- eBAY → Expenses:Online Services:Ebay
 - HLU*, HULU → Expenses:Online Services:Hulu
 - PRIME VIDEO, AMZN, AMAZON, KINDLE → Expenses:Online Services:Amazon
 - NETFLIX, DISNEY+, DISNEY PLUS, HBO, MAX → Expenses:Online Services:<service>
@@ -105,7 +112,8 @@ Rules:
 - One entry per CSV row
 - Blank line between entries
 - *AUTO in a merchant name is auto insurance or auto parts, not AUTOMATIC PAYMENT
-- Never post a Type=Sale row to Assets:Checking:Bank Account
+- Never post a Type=Sale, Return, or Adjustment row to Assets:Checking:Bank Account
+- Return/Adjustment/Refund always includes Expenses:* (same account as the original sale) plus the credit card line
 """
 
 MESSAGE user """Filename: Chase1234_Activity201912.csv
@@ -188,3 +196,12 @@ MESSAGE assistant """2020-03-13	03/12/2020; NAME-CHEAP.com* KVEXQI; Professional
 2020-03-15	03/14/2020; CLOUDFLARE.COM*; Professional Services; Sale	; 
 	Expenses:Online Services:TLD			
 	Liabilities:Credit Card 1234			-$10.00	"""
+
+MESSAGE user """Filename: Chase1234_Activity201911.csv
+
+Transaction Date	Post Date	Description	Category	Type	Amount
+11/05/2019	11/06/2019	eBAY 0*04-13524-76776	Shopping	Adjustment	463.18"""
+
+MESSAGE assistant """2019-11-06	11/05/2019; eBAY 0*04-13524-76776; Shopping; Adjustment	; 
+	Expenses:Online Services:Ebay
+	Liabilities:Credit Card 6697			$463.18	"""

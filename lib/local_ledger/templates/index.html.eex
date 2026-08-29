@@ -101,6 +101,7 @@
 
     <script>
       let ledgerContent = '';
+      let ledgerFilename = 'credit-card.ledger';
 
       function uploadFile() {
         const fileInput = document.getElementById('csvFile');
@@ -134,6 +135,7 @@
         registerDiv.textContent = '';
         downloadBtn.style.display = 'none';
         ledgerContent = '';
+        ledgerFilename = 'credit-card.ledger';
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
@@ -154,11 +156,13 @@
             balanceDiv.textContent = data.balance || '(no balances)';
             registerDiv.textContent = data.register || '(empty register)';
             ledgerContent = data.journal || '';
+            if (data.download) ledgerFilename = data.download;
             downloadBtn.style.display = 'inline-block';
           } else if (data.type === 'report_error') {
             statusDiv.textContent = 'ledger: ' + data.message;
             statusDiv.style.color = '#f48771';
             ledgerContent = data.journal || '';
+            if (data.download) ledgerFilename = data.download;
             if (ledgerContent) {
               responseDiv.style.display = 'block';
               responseDiv.textContent = ledgerContent;
@@ -196,7 +200,7 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'journal.ledger';
+        a.download = ledgerFilename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

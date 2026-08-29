@@ -63,10 +63,10 @@ defmodule LocalLedger.BatchSocket do
 
                   case LocalLedger.LedgerCli.reports(journal) do
                     {:ok, reports} ->
-                      send(ws_pid, {:report, reports, journal})
+                      send(ws_pid, {:report, reports, journal, LocalLedger.LedgerCli.download_name(journal, filename)})
 
                     {:error, message} ->
-                      send(ws_pid, {:report_error, message, journal})
+                      send(ws_pid, {:report_error, message, journal, LocalLedger.LedgerCli.download_name(journal, filename)})
                   end
                 end
               rescue
@@ -100,24 +100,26 @@ defmodule LocalLedger.BatchSocket do
     {:reply, {:text, msg}, state}
   end
 
-  def websocket_info({:report, reports, journal}, state) do
+  def websocket_info({:report, reports, journal, download}, state) do
     msg =
       JSON.encode!(%{
         type: "report",
         balance: reports.balance,
         register: reports.register,
-        journal: journal
+        journal: journal,
+        download: download
       })
 
     {:reply, {:text, msg}, state}
   end
 
-  def websocket_info({:report_error, message, journal}, state) do
+  def websocket_info({:report_error, message, journal, download}, state) do
     msg =
       JSON.encode!(%{
         type: "report_error",
         message: message,
-        journal: journal
+        journal: journal,
+        download: download
       })
 
     {:reply, {:text, msg}, state}

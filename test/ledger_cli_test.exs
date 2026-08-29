@@ -57,4 +57,21 @@ defmodule LocalLedger.LedgerCliTest do
     assert {:error, message} = LedgerCli.reports(unbalanced)
     assert message =~ "balance" or message =~ "Balance"
   end
+
+  test "names the download after the card last four in the journal" do
+    assert LedgerCli.download_name(@journal, "Chase6697_Activity201912.csv") ==
+             "credit-card1234.ledger"
+  end
+
+  test "falls back to last four in the upload filename" do
+    assert LedgerCli.download_name("", "Chase6697_Activity201912.csv") == "credit-card6697.ledger"
+  end
+
+  test "does not treat the activity year as the last four" do
+    assert LedgerCli.download_name("", "Chase_Activity201912.csv") == "credit-card.ledger"
+  end
+
+  test "falls back when last four is unknown" do
+    assert LedgerCli.download_name("", "statement.csv") == "credit-card.ledger"
+  end
 end
