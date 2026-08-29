@@ -113,12 +113,12 @@
         const reader = new FileReader();
         reader.onload = function(e) {
           const csvContent = e.target.result;
-          processWithWebSocket(csvContent);
+          processWithWebSocket(csvContent, file.name);
         };
         reader.readAsText(file);
       }
 
-      function processWithWebSocket(csvContent) {
+      function processWithWebSocket(csvContent, filename) {
         const statusDiv = document.getElementById('status');
         const responseDiv = document.getElementById('response');
         const downloadBtn = document.getElementById('downloadBtn');
@@ -158,7 +158,8 @@
           // Send CSV content first
           ws.send(JSON.stringify({
             action: 'process',
-            csv_content: csvContent
+            csv_content: csvContent,
+            filename: filename
           }));
           // Then signal ready to start processing
           ws.send(JSON.stringify({ action: 'ready' }));

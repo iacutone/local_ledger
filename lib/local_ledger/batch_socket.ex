@@ -14,8 +14,11 @@ defmodule LocalLedger.BatchSocket do
 
   def websocket_handle({:text, msg}, state) do
     case JSON.decode(msg) do
-      {:ok, %{"action" => "process", "csv_content" => csv_content}} ->
-        {:ok, Map.put(state, :pending_csv, csv_content)}
+      {:ok, %{"action" => "process", "csv_content" => csv_content} = payload} ->
+        {:ok,
+         state
+         |> Map.put(:pending_csv, csv_content)
+         |> Map.put(:pending_filename, payload["filename"])}
 
       {:ok, %{"action" => "ready"}} ->
         case Map.get(state, :pending_csv) do
@@ -24,13 +27,14 @@ defmodule LocalLedger.BatchSocket do
 
           csv_content ->
             ws_pid = self()
+            filename = Map.get(state, :pending_filename)
 
             Task.start(fn ->
               try do
                 batches = LocalLedger.OllamaClient.parse_csv_and_prepare_batches(csv_content)
 
                 total_batches = length(batches)
-                
+
                 Enum.with_index(batches, 1)
                 |> Enum.each(fn {batch, index} ->
                   send(ws_pid, {:batch_progress, index, total_batches})
@@ -40,8 +44,16 @@ defmodule LocalLedger.BatchSocket do
                     send(ws_pid, {:batch_separator})
                   end
 
-                  # Call directly - streaming sends chunks as they arrive
-                  LocalLedger.OllamaClient.stream_batch_to_pid(batch, ws_pid)
+                  prompt =
+                    case filename do
+                      name when is_binary(name) and name != "" ->
+                        "Filename: #{name}\n\n#{batch}"
+
+                      _ ->
+                        batch
+                    end
+
+                  LocalLedger.OllamaClient.stream_batch_to_pid(prompt, ws_pid)
                 end)
 
                 send(ws_pid, :processing_done)
@@ -54,7 +66,7 @@ defmodule LocalLedger.BatchSocket do
               end
             end)
 
-            {:ok, Map.delete(state, :pending_csv)}
+            {:ok, state |> Map.delete(:pending_csv) |> Map.delete(:pending_filename)}
         end
 
       _ ->
