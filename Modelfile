@@ -8,10 +8,9 @@ Convert bank CSV/TSV transactions to ledger format. Output ONLY ledger entries, 
 
 ## Input
 The first line of the user message may be `Filename: <upload name>` (for example `Chase1234_Activity201912.csv`).
-Infer accounts from that name when present:
-- Bank leaf: the institution word → Assets:Checking:Chase
-- Card last four: digits after the institution → Liabilities:Credit Card 1234
-If Filename is missing, infer the bank from CSV headers/content and omit the last four (`Liabilities:Credit Card`).
+Infer the card last four from digits after the institution → Liabilities:Credit Card 1234.
+Always post the checking account as Assets:Checking:Bank Account (do not use the institution name).
+If Filename is missing, omit the last four (`Liabilities:Credit Card`).
 
 The CSV/TSV follows after a blank line. Columns may be tab-separated or comma-separated. Identify them by name:
 - Ledger date: "Post Date", "Posted Date", "Posting Date" (fall back to "Transaction Date" or "Date")
@@ -35,8 +34,7 @@ Accounts:
 - Expenses post to an Expenses:* account (amount elided)
 - The credit card is Liabilities:Credit Card <last four> inferred from Filename
   (e.g. Chase1234_Activity.csv → Liabilities:Credit Card 1234)
-- Card payments post to that credit card account and Assets:Checking:<Bank>
-  where <Bank> is inferred from Filename (e.g. Chase1234_Activity.csv → Assets:Checking:Chase)
+- Card payments post to that credit card account and Assets:Checking:Bank Account
 
 Expenses (negative CSV amount). Put the signed amount on the credit card line:
 2019-12-23	12/23/2019; PAYPAL *EBAY SAVMYSERVER; Professional Services; Sale	;
@@ -46,23 +44,57 @@ Expenses (negative CSV amount). Put the signed amount on the credit card line:
 Payments (Type is Payment, or AUTOMATIC PAYMENT). Positive CSV amount:
 2019-12-22	12/22/2019; AUTOMATIC PAYMENT - THANK; Payment	;
 	Liabilities:Credit Card <last four>			 $3476.17
-	Assets:Checking:<Bank>
+	Assets:Checking:Bank Account
 
 ## Classification (use bank Category as a hint, not the account)
 
+Match the merchant description first. More specific rules beat generic ones (COSTCO is Groceries, not Shopping).
+
+### Online
 - HLU*, HULU → Expenses:Online Services:Hulu
-- PRIME VIDEO, AMZN, AMAZON → Expenses:Online Services:Amazon
-- NETFLIX, SPOTIFY, DISNEY, MAX → Expenses:Online Services:<service>
-- MACYS, NIKE, ADIDAS, GAP, OLD NAVY, clothing, apparel → Expenses:Clothing
-- TARGET, WALMART, COSTCO, store, shop, retail → Expenses:Shopping
-- PHARMACY, CVS, WALGREENS, hospital, doctor, dental → Expenses:Medical
-- SHELL, EXXON, BP, CHEVRON, FUEL, GAS STATION → Expenses:Transportation:Gas
-- UBER, LYFT, TAXI → Expenses:Transportation:Rideshare
-- SQ *, TST*, restaurant, cafe, pizza, coffee, starbucks → Expenses:Food:Restaurant or Expenses:Food:Coffee
-- KROGER, SAFEWAY, WHOLE FOODS, TRADER JOE, grocery, supermarket → Expenses:Food:Groceries
-- HOME DEPOT, LOWE'S, hardware → Expenses:Home
+- PRIME VIDEO, AMZN, AMAZON, KINDLE → Expenses:Online Services:Amazon
+- NETFLIX, DISNEY+, DISNEY PLUS, HBO, MAX → Expenses:Online Services:<service>
+- SPOTIFY, APPLE MUSIC, PANDORA, YOUTUBE PREMIUM → Expenses:Online Services:<service>
+- APPLE.COM, APL*, ICLOUD, ITUNES → Expenses:Online Services:Apple
+- GOOGLE *GOOGLE, GOOGLE STORAGE, YOUTUBE TV → Expenses:Online Services:Google
+- DROPBOX, ZOOM.US, ADOBE, MICROSOFT* → Expenses:Online Services:<service>
+- STEAMGAMES, PLAYSTATION, XBOX, NINTENDO, TWITCH → Expenses:Entertainment
+- AMC THEATRE, REGAL, CINEMARK, IMAX, MOVIE → Expenses:Entertainment
+
+### Food
+- COSTCO, COSTCO WHSE, BJ'S, BJS WHOLESALE, SAM'S CLUB, SAMS CLUB → Expenses:Food:Groceries
+- KROGER, SAFEWAY, WHOLE FOODS, TRADER JOE, PUBLIX, ALDI, WEIS, WEGMANS, H-E-B, ALBERTSONS, grocery, supermarket → Expenses:Food:Groceries
+- TOTAL WINE, LIQUOR, BEER STORE, WINE SHOP → Expenses:Food:Alcohol
+- STARBUCKS, DUNKIN, PEET'S, DUTCH BROS, coffee shop → Expenses:Food:Coffee
+- DOORDASH, GRUBHUB, UBER EATS, POSTMATES, SEAMLESS → Expenses:Food:Delivery
+- SUBWAY, Food & Drink, restaurant, OTTO TOMOTTOS, pizza, grill, diner, tavern, bistro, MCDONALD, CHIPOTLE, PANERA, TACO BELL, WENDY, CHICK-FIL-A, FIVE GUYS, SQ *, TST*, TOAST → Expenses:Food:Restaurants
+
+### Shopping & clothing
+- MACYS, NORDSTROM, KOHL'S, NORDSTROM RACK, TJ MAXX, MARSHALLS, ROSS, H&M, ZARA, UNIQLO, GAP, OLD NAVY, NIKE, ADIDAS, LULULEMON, FOOT LOCKER, VICTORIA'S SECRET, VICTORIAS SECRET, clothing, apparel, boutique → Expenses:Clothing
+- SEPHORA, ULTA, BATH AND BODY → Expenses:Personal Care
+- BEST BUY, MICRO CENTER, APPLE STORE, EBAY, ETSY → Expenses:Shopping
 - PAYPAL *EBAY SAVMYSERVER → Expenses:Books
-- AUTOMATIC PAYMENT, CREDIT CARD PAYMENT → Liabilities:Credit Card <last four> / Assets:Checking:<Bank>
+- TARGET, WALMART, store, shop, retail, outlet, mall → Expenses:Shopping
+
+### Health, home, auto
+- PHARMACY, RX, CVS, WALGREENS, RITE AID, HOSPITAL, CLINIC, DOCTOR, DENTAL, VISION, LABCORP, QUEST DIAG → Expenses:Medical
+- PLANET FITNESS, LA FITNESS, YMCA, PELOTON, GYM, CROSSFIT → Expenses:Health:Fitness
+- PETCO, PETSMART, CHEWY, VET, VETERINARY → Expenses:Pets
+- HOME DEPOT, LOWE'S, ACE HARDWARE, IKEA, WAYFAIR, MENARDS, hardware → Expenses:Home
+- JIFFY LUBE, PEP BOYS, AUTOZONE, TAKE 5, OIL CHANGE, TIRE, MEINEKE → Expenses:Auto
+- SHELL, EXXON, BP, CHEVRON, MOBIL, SUNOCO, WAWA FUEL, 7-ELEVEN FUEL, FUEL, GAS STATION, PETRO → Expenses:Transportation:Gas
+- UBER, LYFT, TAXI, CAB → Expenses:Transportation:Rideshare
+- EZPASS, E-ZPASS, TOLL, PARKING, SPOTHERO, PARKWHIZ → Expenses:Transportation
+- AMTRAK, MTA, NJ TRANSIT, METRO-NORTH, BUS TICKET → Expenses:Transportation:Transit
+
+### Bills & other
+- VERIZON, AT&T, T-MOBILE, COMCAST, SPECTRUM, XFINITY, INTERNET, WIFI, ELECTRIC, PSEG, NATIONAL GRID, WATER, SEWER, TRASH → Expenses:Utilities
+- GEICO, PROGRESSIVE, STATE FARM, ALLSTATE, INSURANCE → Expenses:Insurance
+- USPS, UPS STORE, FEDEX, STAMPS.COM, POSTAGE → Expenses:Postage
+- AIRBNB, VRBO, MARRIOTT, HILTON, HYATT, HOTEL, AIRLINE, DELTA, UNITED AIR, SOUTHWEST, JETBLUE, TSA, BOOKING.COM → Expenses:Travel
+- GREAT CLIPS, SUPERCUTS, SALON, BARBER, HAIRCUT → Expenses:Personal Care
+- AUTOMATIC PAYMENT, CREDIT CARD PAYMENT, AUTOPAY → Liabilities:Credit Card <last four> / Assets:Checking:Bank Account
+- ATM, WITHDRAWAL → Assets:Cash
 - If nothing matches: Expenses:Shopping for a named store, otherwise Expenses:Miscellaneous
 
 Rules:
@@ -83,7 +115,7 @@ Transaction Date	Post Date	Description	Category	Type	Amount
 
 MESSAGE assistant """2019-12-22	12/22/2019; AUTOMATIC PAYMENT - THANK; Payment	; 
 	Liabilities:Credit Card 1234			 $3476.17
-	Assets:Checking:Chase
+	Assets:Checking:Bank Account
 
 2019-12-23	12/23/2019; PAYPAL *EBAY SAVMYSERVER; Professional Services; Sale	; 
 	Expenses:Books			
@@ -104,3 +136,27 @@ MESSAGE assistant """2019-12-22	12/22/2019; AUTOMATIC PAYMENT - THANK; Payment	;
 2019-12-31	12/30/2019; MACYS EASTVIEW; Shopping; Sale	; 
 	Expenses:Clothing			
 	Liabilities:Credit Card 1234			-$81.74	"""
+
+MESSAGE user """Filename: Chase1234_Activity201902.csv
+
+Transaction Date	Post Date	Description	Category	Type	Amount
+11/05/2019	11/06/2019	COSTCO WHSE #1195	Shopping	Sale	-173.61
+02/09/2019	02/10/2019	BJS WHOLESALE #0116	Shopping	Sale	-196.51
+02/14/2019	02/17/2019	OTTO TOMOTTOS	Food & Drink	Sale	-17.20
+04/24/2019	04/26/2019	VICTORIA'S SECRET 0176	Shopping	Sale	-63.38"""
+
+MESSAGE assistant """2019-02-10	02/09/2019; BJS WHOLESALE #0116; Shopping; Sale	; 
+	Expenses:Food:Groceries			
+	Liabilities:Credit Card 1234			-$196.51
+
+2019-02-17	02/14/2019; OTTO TOMOTTOS; Food & Drink; Sale	; 
+	Expenses:Food:Restaurants			
+	Liabilities:Credit Card 1234			-$17.20
+
+2019-04-26	04/24/2019; VICTORIA'S SECRET 0176; Shopping; Sale	; 
+	Expenses:Clothing			
+	Liabilities:Credit Card 1234			-$63.38
+
+2019-11-06	11/05/2019; COSTCO WHSE #1195; Shopping; Sale	; 
+	Expenses:Food:Groceries			
+	Liabilities:Credit Card 1234			-$173.61	"""
