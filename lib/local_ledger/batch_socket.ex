@@ -70,8 +70,8 @@ defmodule LocalLedger.BatchSocket do
                   end
                 end
               rescue
-                _e ->
-                  send(ws_pid, {:error, "An error occurred during processing. Please try again."})
+                e ->
+                  send(ws_pid, {:error, "An error occurred: #{Exception.message(e)}"})
               catch
                 :timeout ->
                   :ok

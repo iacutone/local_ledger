@@ -81,8 +81,9 @@ defmodule LocalLedger.OllamaClient do
 
     headers = [{"content-type", "application/json"}]
 
-    result = Finch.build(:post, url, headers, body)
-    |> Finch.stream(LocalLedger.Finch, "", fn
+    result =
+      Finch.build(:post, url, headers, body)
+      |> Finch.stream(LocalLedger.Finch, "", fn
       {:data, data}, buffer ->
         new_buffer = buffer <> data
         lines = String.split(new_buffer, "\n")
@@ -109,7 +110,7 @@ defmodule LocalLedger.OllamaClient do
         remaining
 
       _, buffer -> buffer
-    end)
+    end, [receive_timeout: 120_000])
 
     # Process any remaining buffer content
     case result do
@@ -119,7 +120,12 @@ defmodule LocalLedger.OllamaClient do
             send(pid, {:chunk, resp})
           _ -> :ok
         end
-      _ -> :ok
+      {:ok, _} ->
+        :ok
+      {:error, %Finch.TransportError{reason: :timeout}, _acc} ->
+        send(pid, {:error, "Ollama server timed out. It may be busy - please try again."})
+      {:error, _reason, _acc} ->
+        send(pid, {:error, "Ollama server not responding. Please try again later."})
     end
   end
 

@@ -98,7 +98,7 @@ Match the merchant description first. More specific rules beat generic ones (COS
 
 ### Bills & other
 - VERIZON, AT&T, T-MOBILE, COMCAST, SPECTRUM, XFINITY, INTERNET, WIFI, ELECTRIC, PSEG, NATIONAL GRID, WATER, SEWER, TRASH → Expenses:Utilities
-- GEICO, GEICO *AUTO, *AUTO (insurance), PROGRESSIVE, STATE FARM AUTO, ALLSTATE AUTO, car insurance → Expenses:Insurance:Car
+- GEICO, GEICO *AUTO, GEICO. *AUTO, GEICO* (any variant), PROGRESSIVE, STATE FARM AUTO, ALLSTATE AUTO, car insurance → Expenses:Insurance:Car
 - STATE FARM, ALLSTATE, USAA, LIBERTY MUTUAL, INSURANCE (no AUTO/CAR) → Expenses:Insurance
 - USPS, UPS STORE, FEDEX, STAMPS.COM, POSTAGE → Expenses:Postage
 - AIRBNB, VRBO, MARRIOTT, HILTON, HYATT, HOTEL, AIRLINE, DELTA, UNITED AIR, SOUTHWEST, JETBLUE, TSA, BOOKING.COM → Expenses:Travel
@@ -177,9 +177,14 @@ MESSAGE assistant """2019-02-10	02/09/2019; BJS WHOLESALE #0116; Shopping; Sale	
 MESSAGE user """Filename: Chase6697_Activity201911.csv
 
 Transaction Date	Post Date	Description	Category	Type	Amount
+11/05/2019	11/06/2019	GEICO *AUTO	Bills & Utilities	Sale	-463.18
 11/05/2019	11/06/2019	GEICO.  *AUTO	Bills & Utilities	Sale	-463.18"""
 
-MESSAGE assistant """2019-11-06	11/05/2019; GEICO.  *AUTO; Bills & Utilities; Sale	; 
+MESSAGE assistant """2019-11-06	11/05/2019; GEICO *AUTO; Bills & Utilities; Sale	; 
+	Expenses:Insurance:Car			
+	Liabilities:Credit Card 6697			-$463.18
+
+2019-11-06	11/05/2019; GEICO.  *AUTO; Bills & Utilities; Sale	; 
 	Expenses:Insurance:Car			
 	Liabilities:Credit Card 6697			-$463.18	"""
 
