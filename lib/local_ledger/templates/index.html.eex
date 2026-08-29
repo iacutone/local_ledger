@@ -35,8 +35,8 @@
       </div>
     </div>
     
-    <input type="file" id="csvFile" accept=".csv" />
-    <button onclick="uploadFile()">Upload & Process</button>
+    <input type="file" id="csvFile" accept=".csv" onchange="onFileSelected()" />
+    <button id="uploadBtn" onclick="uploadFile()" style="display:none;">Upload & Process</button>
     <div id="status" class="status"></div>
     <button id="downloadBtn" style="display:none;margin-top:1rem;" onclick="downloadLedger()">Download Journal</button>
     <div id="reports" style="display:none;">
@@ -103,6 +103,12 @@
       let ledgerContent = '';
       let ledgerFilename = 'credit-card.ledger';
 
+      function onFileSelected() {
+        const fileInput = document.getElementById('csvFile');
+        const uploadBtn = document.getElementById('uploadBtn');
+        uploadBtn.style.display = fileInput.files.length > 0 ? 'inline-block' : 'none';
+      }
+
       function uploadFile() {
         const fileInput = document.getElementById('csvFile');
         const file = fileInput.files[0];
@@ -134,6 +140,7 @@
         balanceDiv.textContent = '';
         registerDiv.textContent = '';
         downloadBtn.style.display = 'none';
+        document.getElementById('uploadBtn').style.display = 'none';
         ledgerContent = '';
         ledgerFilename = 'credit-card.ledger';
 
