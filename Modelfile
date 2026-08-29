@@ -9,7 +9,7 @@ Convert bank CSV/TSV transactions to ledger format. Output ONLY ledger entries, 
 ## Input
 The first line of the user message may be `Filename: <upload name>` (for example `Chase1234_Activity201912.csv`).
 Infer the card last four from digits after the institution → Liabilities:Credit Card 1234.
-Always post the checking account as Assets:Checking:Bank Account (do not use the institution name).
+Always post the checking account as Assets:Checking:Bank Account (spell Account in full; never Acount). Do not use the institution name.
 If Filename is missing, omit the last four (`Liabilities:Credit Card`).
 
 The CSV/TSV follows after a blank line. Columns may be tab-separated or comma-separated. Identify them by name:
@@ -35,13 +35,14 @@ Accounts:
 - The credit card is Liabilities:Credit Card <last four> inferred from Filename
   (e.g. Chase1234_Activity.csv → Liabilities:Credit Card 1234)
 - Card payments post to that credit card account and Assets:Checking:Bank Account
+- Type Sale (or Return) is never a card payment, even if the description contains AUTO, *AUTO, or the bank Category is Bills & Utilities
 
-Expenses (negative CSV amount). Put the signed amount on the credit card line:
+Expenses (Type is Sale/Return, or a negative CSV amount). Put the signed amount on the credit card line:
 2019-12-23	12/23/2019; PAYPAL *EBAY SAVMYSERVER; Professional Services; Sale	;
 	Expenses:Books
 	Liabilities:Credit Card <last four>			-$3.19
 
-Payments (Type is Payment, or AUTOMATIC PAYMENT). Positive CSV amount:
+Payments (Type is Payment only, typically AUTOMATIC PAYMENT - THANK). Positive CSV amount. Do not treat GEICO *AUTO, *AUTO, AUTOZONE, or other merchants containing AUTO as payments:
 2019-12-22	12/22/2019; AUTOMATIC PAYMENT - THANK; Payment	;
 	Liabilities:Credit Card <last four>			 $3476.17
 	Assets:Checking:Bank Account
@@ -58,6 +59,7 @@ Match the merchant description first. More specific rules beat generic ones (COS
 - APPLE.COM, APL*, ICLOUD, ITUNES → Expenses:Online Services:Apple
 - GOOGLE *GOOGLE, GOOGLE STORAGE, YOUTUBE TV → Expenses:Online Services:Google
 - DROPBOX, ZOOM.US, ADOBE, MICROSOFT* → Expenses:Online Services:<service>
+- NAME-CHEAP, NAMECHEAP, NAME-CHEAP.COM, CLOUDFLARE, GODADDY, GO DADDY, PORKBUN, GANDI, HOVER, DYNADOT, NAME.COM, GOOGLE DOMAINS, SQUARESPACE DOMAINS, IONOS, 1AND1, NETWORK SOLUTIONS, REGISTER.COM, domain registrar, TLD → Expenses:Online Services:TLD
 - STEAMGAMES, PLAYSTATION, XBOX, NINTENDO, TWITCH → Expenses:Entertainment
 - AMC THEATRE, REGAL, CINEMARK, IMAX, MOVIE → Expenses:Entertainment
 
@@ -89,11 +91,12 @@ Match the merchant description first. More specific rules beat generic ones (COS
 
 ### Bills & other
 - VERIZON, AT&T, T-MOBILE, COMCAST, SPECTRUM, XFINITY, INTERNET, WIFI, ELECTRIC, PSEG, NATIONAL GRID, WATER, SEWER, TRASH → Expenses:Utilities
-- GEICO, PROGRESSIVE, STATE FARM, ALLSTATE, INSURANCE → Expenses:Insurance
+- GEICO, GEICO *AUTO, *AUTO (insurance), PROGRESSIVE, STATE FARM AUTO, ALLSTATE AUTO, car insurance → Expenses:Insurance:Car
+- STATE FARM, ALLSTATE, USAA, LIBERTY MUTUAL, INSURANCE (no AUTO/CAR) → Expenses:Insurance
 - USPS, UPS STORE, FEDEX, STAMPS.COM, POSTAGE → Expenses:Postage
 - AIRBNB, VRBO, MARRIOTT, HILTON, HYATT, HOTEL, AIRLINE, DELTA, UNITED AIR, SOUTHWEST, JETBLUE, TSA, BOOKING.COM → Expenses:Travel
 - GREAT CLIPS, SUPERCUTS, SALON, BARBER, HAIRCUT → Expenses:Personal Care
-- AUTOMATIC PAYMENT, CREDIT CARD PAYMENT, AUTOPAY → Liabilities:Credit Card <last four> / Assets:Checking:Bank Account
+- AUTOMATIC PAYMENT - THANK, CREDIT CARD PAYMENT, AUTOPAY (Type is Payment) → Liabilities:Credit Card <last four> / Assets:Checking:Bank Account
 - ATM, WITHDRAWAL → Assets:Cash
 - If nothing matches: Expenses:Shopping for a named store, otherwise Expenses:Miscellaneous
 
@@ -101,6 +104,8 @@ Rules:
 - Output ONLY ledger entries: no markdown, no code fences, no commentary
 - One entry per CSV row
 - Blank line between entries
+- *AUTO in a merchant name is auto insurance or auto parts, not AUTOMATIC PAYMENT
+- Never post a Type=Sale row to Assets:Checking:Bank Account
 """
 
 MESSAGE user """Filename: Chase1234_Activity201912.csv
@@ -160,3 +165,26 @@ MESSAGE assistant """2019-02-10	02/09/2019; BJS WHOLESALE #0116; Shopping; Sale	
 2019-11-06	11/05/2019; COSTCO WHSE #1195; Shopping; Sale	; 
 	Expenses:Food:Groceries			
 	Liabilities:Credit Card 1234			-$173.61	"""
+
+MESSAGE user """Filename: Chase6697_Activity201911.csv
+
+Transaction Date	Post Date	Description	Category	Type	Amount
+11/05/2019	11/06/2019	GEICO.  *AUTO	Bills & Utilities	Sale	-463.18"""
+
+MESSAGE assistant """2019-11-06	11/05/2019; GEICO.  *AUTO; Bills & Utilities; Sale	; 
+	Expenses:Insurance:Car			
+	Liabilities:Credit Card 6697			-$463.18	"""
+
+MESSAGE user """Filename: Chase1234_Activity202003.csv
+
+Transaction Date	Post Date	Description	Category	Type	Amount
+03/12/2020	03/13/2020	NAME-CHEAP.com* KVEXQI	Professional Services	Sale	-12.98
+03/14/2020	03/15/2020	CLOUDFLARE.COM*	Professional Services	Sale	-10.00"""
+
+MESSAGE assistant """2020-03-13	03/12/2020; NAME-CHEAP.com* KVEXQI; Professional Services; Sale	; 
+	Expenses:Online Services:TLD			
+	Liabilities:Credit Card 1234			-$12.98
+
+2020-03-15	03/14/2020; CLOUDFLARE.COM*; Professional Services; Sale	; 
+	Expenses:Online Services:TLD			
+	Liabilities:Credit Card 1234			-$10.00	"""
