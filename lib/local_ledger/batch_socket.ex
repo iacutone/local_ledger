@@ -51,7 +51,7 @@ defmodule LocalLedger.BatchSocket do
                           batch
                       end
 
-                    LocalLedger.OllamaClient.generate(prompt)
+                    generate_with_retry(prompt, 3, ws_pid, index, total_batches)
                   end)
                   |> Enum.reject(&(&1 == ""))
                   |> Enum.join("\n\n")
@@ -124,6 +124,11 @@ defmodule LocalLedger.BatchSocket do
     {:reply, {:text, msg}, state}
   end
 
+  def websocket_info({:retry, index, total, retries_left}, state) do
+    msg = JSON.encode!(%{type: "progress", current: index, total: total, message: "Batch #{index} timed out, retrying (#{retries_left} left)..."})
+    {:reply, {:text, msg}, state}
+  end
+
   def websocket_info({:error, message}, state) do
     msg = JSON.encode!(%{type: "error", message: message})
     {:reply, {:text, msg}, state}
@@ -139,5 +144,17 @@ defmodule LocalLedger.BatchSocket do
 
   def terminate(_reason, _req, _state) do
     :ok
+  end
+
+  defp generate_with_retry(prompt, retries_left, ws_pid, index, total) do
+    result = LocalLedger.OllamaClient.generate(prompt)
+
+    if result == "" and retries_left > 0 do
+      send(ws_pid, {:retry, index, total, retries_left})
+      Process.sleep(5_000)
+      generate_with_retry(prompt, retries_left - 1, ws_pid, index, total)
+    else
+      result
+    end
   end
 end

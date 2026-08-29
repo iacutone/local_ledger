@@ -22,6 +22,7 @@ The CSV/TSV follows after a blank line. Columns may be tab-separated or comma-se
 
 ## Output
 Use Post Date as the entry date (YYYY-MM-DD). Sort entries by that date ascending.
+IMPORTANT: Copy the Post Date column value directly - do NOT add or subtract days. If Post Date is "01/08/2025" write "2025-01-08".
 
 Keep the original description text (do not proper-case it).
 
@@ -174,7 +175,16 @@ MESSAGE assistant """2019-02-10	02/09/2019; BJS WHOLESALE #0116; Shopping; Sale	
 	Expenses:Food:Groceries			
 	Liabilities:Credit Card 1234			-$173.61	"""
 
-MESSAGE user """Filename: Chase6697_Activity201911.csv
+MESSAGE user """Filename: Chase1234_Activity202501.csv
+
+Transaction Date	Post Date	Description	Category	Type	Amount
+01/07/2025	01/08/2025	WALGREENS #3650	Health & Wellness	Sale	-12.49"""
+
+MESSAGE assistant """2025-01-08	01/07/2025; WALGREENS #3650; Health & Wellness; Sale	; 
+	Expenses:Medical			
+	Liabilities:Credit Card 1234			-$12.49	"""
+
+MESSAGE user """Filename: Chase1234_Activity201911.csv
 
 Transaction Date	Post Date	Description	Category	Type	Amount
 11/05/2019	11/06/2019	GEICO *AUTO	Bills & Utilities	Sale	-463.18
@@ -182,11 +192,11 @@ Transaction Date	Post Date	Description	Category	Type	Amount
 
 MESSAGE assistant """2019-11-06	11/05/2019; GEICO *AUTO; Bills & Utilities; Sale	; 
 	Expenses:Insurance:Car			
-	Liabilities:Credit Card 6697			-$463.18
+	Liabilities:Credit Card 1234			-$463.18
 
 2019-11-06	11/05/2019; GEICO.  *AUTO; Bills & Utilities; Sale	; 
 	Expenses:Insurance:Car			
-	Liabilities:Credit Card 6697			-$463.18	"""
+	Liabilities:Credit Card 1234			-$463.18	"""
 
 MESSAGE user """Filename: Chase1234_Activity202003.csv
 
@@ -209,4 +219,4 @@ Transaction Date	Post Date	Description	Category	Type	Amount
 
 MESSAGE assistant """2019-11-06	11/05/2019; eBAY 0*04-13524-76776; Shopping; Adjustment	; 
 	Expenses:Online Services:Ebay
-	Liabilities:Credit Card 6697			$463.18	"""
+	Liabilities:Credit Card 1234			$463.18	"""

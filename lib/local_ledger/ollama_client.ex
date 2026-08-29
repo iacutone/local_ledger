@@ -185,6 +185,8 @@ defmodule LocalLedger.OllamaClient do
   def parse_csv_and_prepare_batches(csv_content) do
     lines =
       csv_content
+      |> String.replace("\r\n", "\n")
+      |> String.replace("\r", "\n")
       |> String.trim()
       |> String.split("\n")
       |> Enum.filter(&(&1 != ""))

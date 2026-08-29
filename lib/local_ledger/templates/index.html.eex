@@ -62,8 +62,6 @@
       <div id="reports" style="display:none;">
         <h2>Account balances</h2>
         <div id="balance" class="response"></div>
-        <h2>Register</h2>
-        <div id="register" class="response"></div>
       </div>
       <div id="response" class="response" style="display:none;"></div>
     </main>
@@ -78,7 +76,7 @@
         <ol>
           <li>Download your credit card or bank statement as a CSV file</li>
           <li>Click "Choose File" and select your CSV</li>
-          <li>Click "Upload & Process" to convert and run <code>ledger balance</code> / <code>ledger register</code></li>
+          <li>Click "Upload & Process" to convert to ledger format</li>
           <li>Download the journal file if you want to keep it</li>
         </ol>
 
@@ -111,7 +109,7 @@
         </ul>
 
         <h3>How It Works</h3>
-        <p>Upload your bank's CSV export, and Local Ledger uses a local AI model (Ollama) to convert it to a ledger journal, then runs <a href="https://ledger-cli.org/doc/ledger3.html#Structuring-your-Accounts" target="_blank" style="color:#4ec9b0;">ledger-cli</a> to show account balances and a register.</p>
+        <p>Upload your bank's CSV export, and Local Ledger uses a local AI model (Ollama) to convert it to a ledger journal and show account balances.</p>
 
         <h3>Privacy First</h3>
         <p>All processing happens on my server. I will neither store nor view any of your personal data.</p>
@@ -151,7 +149,6 @@
         const responseDiv = document.getElementById('response');
         const reportsDiv = document.getElementById('reports');
         const balanceDiv = document.getElementById('balance');
-        const registerDiv = document.getElementById('register');
         const downloadBtn = document.getElementById('downloadBtn');
         
         statusDiv.textContent = 'Connecting...';
@@ -159,7 +156,6 @@
         responseDiv.textContent = '';
         reportsDiv.style.display = 'none';
         balanceDiv.textContent = '';
-        registerDiv.textContent = '';
         downloadBtn.style.display = 'none';
         document.getElementById('uploadBtn').style.display = 'none';
         ledgerContent = '';
@@ -172,7 +168,8 @@
           const data = JSON.parse(event.data);
           
           if (data.type === 'progress') {
-            statusDiv.textContent = 'Processing batch ' + data.current + ' of ' + data.total + '...';
+            const msg = data.message || ('Processing batch ' + data.current + ' of ' + data.total + '...');
+            statusDiv.textContent = msg;
             statusDiv.style.color = '#858585';
           } else if (data.type === 'progress_message') {
             statusDiv.textContent = data.message;
@@ -182,7 +179,6 @@
             statusDiv.style.color = '#858585';
             reportsDiv.style.display = 'block';
             balanceDiv.textContent = data.balance || '(no balances)';
-            registerDiv.textContent = data.register || '(empty register)';
             ledgerContent = data.journal || '';
             if (data.download) ledgerFilename = data.download;
             downloadBtn.style.display = 'inline-block';
