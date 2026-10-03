@@ -32,17 +32,19 @@ export NGROK_AUTHTOKEN=<your-token>
 
 Add that to your shell profile (`.zshrc`, etc.) so it persists. Make sure the ngrok config file (`~/Library/Application Support/ngrok/ngrok.yml` on macOS) does not have a hardcoded `authtoken` line, as it will override the env var.
 
-**Start the tunnel** (the app must already be running on port 4000):
+**Start the tunnel** pointing at Ollama (port 11434) using the permanent domain:
 
 ```bash
-ngrok http 4000
+ngrok http --url=$NGROK_BASE_URL 11434
 ```
 
-ngrok will print a public URL like `https://abc123.ngrok-free.app`. Use that as the value of `OLLAMA_BASE_URL` when running via Docker:
+Set `OLLAMA_BASE_URL` to the permanent domain when running via Docker:
 
 ```bash
-docker run -e OLLAMA_BASE_URL=https://abc123.ngrok-free.app ...
+docker run -e OLLAMA_BASE_URL=https://$NGROK_BASE_URL ...
 ```
+
+Using the permanent domain means `OLLAMA_BASE_URL` never needs updating after a restart.
 
 You can also inspect live traffic at the ngrok web interface: [http://localhost:4040](http://localhost:4040).
 
