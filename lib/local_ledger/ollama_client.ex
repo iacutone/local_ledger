@@ -19,7 +19,7 @@ defmodule LocalLedger.OllamaClient do
         stream: true
       })
 
-    headers = [{"content-type", "application/json"}]
+    headers = [{"content-type", "application/json"}, {"ngrok-skip-browser-warning", "true"}]
 
     result =
       Finch.build(:post, url, headers, body)
@@ -79,7 +79,7 @@ defmodule LocalLedger.OllamaClient do
       stream: true
     })
 
-    headers = [{"content-type", "application/json"}]
+    headers = [{"content-type", "application/json"}, {"ngrok-skip-browser-warning", "true"}]
 
     result =
       Finch.build(:post, url, headers, body)
@@ -138,7 +138,7 @@ defmodule LocalLedger.OllamaClient do
       stream: true
     })
 
-    headers = [{"content-type", "application/json"}]
+    headers = [{"content-type", "application/json"}, {"ngrok-skip-browser-warning", "true"}]
 
     result = Finch.build(:post, url, headers, body)
     |> Finch.stream(LocalLedger.Finch, {conn, ""}, fn
