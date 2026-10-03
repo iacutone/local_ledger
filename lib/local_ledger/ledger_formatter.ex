@@ -69,9 +69,21 @@ defmodule LocalLedger.LedgerFormatter do
   end
 
   defp classify(transaction, opts) do
-    case Keyword.get(opts, :classifier) do
+    result =
+      case Keyword.get(opts, :classifier) do
       classifier when is_function(classifier, 1) -> classifier.(transaction)
       _ -> LocalLedger.TransactionClassifier.classify(transaction, opts)
+      end
+
+    case result do
+      {:ok, _classification} ->
+        result
+
+      {:error, reason} ->
+        case Keyword.get(opts, :resolve_classification) do
+          resolver when is_function(resolver, 2) -> resolver.(transaction, reason)
+          _ -> {:error, reason}
+        end
     end
   end
 

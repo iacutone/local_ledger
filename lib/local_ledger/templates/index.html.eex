@@ -57,13 +57,23 @@
         <input type="file" id="csvFile" accept=".csv" onchange="onFileSelected()" />
         <button id="uploadBtn" onclick="uploadFile()" style="display:none;">Upload & Process</button>
       </div>
-      <div id="status" class="status"></div>
-      <button id="downloadBtn" style="display:none;margin-top:1rem;" onclick="downloadLedger()">Download Journal</button>
-      <div id="reports" style="display:none;">
-        <h2>Account balances</h2>
-        <div id="balance" class="response"></div>
-      </div>
-      <div id="response" class="response" style="display:none;"></div>
+    <div id="status" class="status"></div>
+    <div id="classificationPrompt" class="response" style="display:none;margin-top:1rem;">
+      <strong>Category needed</strong>
+      <p id="classificationDetails"></p>
+      <label for="entryName">Entry name/account</label>
+      <input id="entryName" list="accountOptions" style="width:100%;margin-top:0.5rem;" />
+      <datalist id="accountOptions"></datalist>
+      <button onclick="submitClassification()" style="margin-top:0.75rem;">Continue</button>
+    </div>
+    <button id="downloadBtn" style="display:none;margin-top:1rem;" onclick="downloadLedger()">Download Journal</button>
+    <div id="reports" style="display:none;">
+      <h2>Account balances</h2>
+      <div id="balance" class="response"></div>
+      <h2 style="margin-top:2rem;">Register</h2>
+      <div id="register" class="response"></div>
+    </div>
+    <div id="response" class="response" style="display:none;"></div>
     </main>
 
     <!-- Instructions Modal -->
@@ -112,7 +122,7 @@
         <p>Upload your bank's CSV export, and Local Ledger uses a local AI model (Ollama) to convert it to a ledger journal and show account balances.</p>
 
         <h3>Privacy First</h3>
-        <p>All processing happens on my server. I will neither store nor view any of your personal data.</p>
+        <p>Processing happens on my server. Classification corrections are stored in a minimal local training log; dates and card identifiers are not retained.</p>
 
         <p style="margin-top:2rem;"><a href="https://thoughts.iacut.one/local-ledger/" target="_blank" style="color:#4ec9b0;">Read more on the blog →</a></p>
       </div>
@@ -121,6 +131,8 @@
     <script>
       let ledgerContent = '';
       let ledgerFilename = 'credit-card.ledger';
+      let activeWebSocket = null;
+      let pendingClassification = null;
 
       function onFileSelected() {
         const fileInput = document.getElementById('csvFile');
@@ -150,6 +162,8 @@
         const reportsDiv = document.getElementById('reports');
         const balanceDiv = document.getElementById('balance');
         const downloadBtn = document.getElementById('downloadBtn');
+        document.getElementById('classificationPrompt').style.display = 'none';
+        pendingClassification = null;
         
         statusDiv.textContent = 'Connecting...';
         responseDiv.style.display = 'none';
@@ -163,6 +177,7 @@
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
+        activeWebSocket = ws;
 
         ws.onmessage = function(event) {
           const data = JSON.parse(event.data);
@@ -170,10 +185,28 @@
           if (data.type === 'progress') {
             statusDiv.textContent = 'Processing transaction ' + data.current + ' of ' + data.total + '...';
             statusDiv.style.color = '#858585';
+          } else if (data.type === 'needs_classification') {
+            pendingClassification = data;
+            document.getElementById('classificationDetails').textContent =
+              data.description + ' — ' + (data.bank_category || 'no bank category') +
+              ' — ' + data.amount + (data.suggested_account ? ' (suggested: ' + data.suggested_account + ')' : '');
+            const input = document.getElementById('entryName');
+            input.value = data.suggested_account || '';
+            const options = document.getElementById('accountOptions');
+            options.innerHTML = '';
+            (data.accounts || []).forEach(function(account) {
+              const option = document.createElement('option');
+              option.value = account;
+              options.appendChild(option);
+            });
+            document.getElementById('classificationPrompt').style.display = 'block';
+            statusDiv.textContent = 'Please choose an account to continue';
+            statusDiv.style.color = '#dcdcaa';
           } else if (data.type === 'progress_message') {
             statusDiv.textContent = data.message;
             statusDiv.style.color = '#858585';
           } else if (data.type === 'report') {
+            document.getElementById('classificationPrompt').style.display = 'none';
             statusDiv.textContent = 'Done';
             statusDiv.style.color = '#858585';
             reportsDiv.style.display = 'block';
@@ -182,6 +215,7 @@
             if (data.download) ledgerFilename = data.download;
             downloadBtn.style.display = 'inline-block';
           } else if (data.type === 'report_error') {
+            document.getElementById('classificationPrompt').style.display = 'none';
             statusDiv.textContent = 'ledger: ' + data.message;
             statusDiv.style.color = '#f48771';
             ledgerContent = data.journal || '';
@@ -192,6 +226,7 @@
               downloadBtn.style.display = 'inline-block';
             }
           } else if (data.type === 'error') {
+            document.getElementById('classificationPrompt').style.display = 'none';
             statusDiv.textContent = 'Error: ' + data.message;
             statusDiv.style.color = '#f48771';
           }
@@ -216,6 +251,24 @@
         ws.onclose = function() {
           console.log('WebSocket closed');
         };
+      }
+
+      function submitClassification() {
+        const input = document.getElementById('entryName');
+        const account = input.value.trim();
+        if (!activeWebSocket || !pendingClassification || !account) {
+          alert('Enter an account name to continue');
+          return;
+        }
+
+        activeWebSocket.send(JSON.stringify({
+          action: 'classify',
+          row_number: pendingClassification.row_number,
+          account: account
+        }));
+        document.getElementById('classificationPrompt').style.display = 'none';
+        document.getElementById('status').textContent = 'Continuing...';
+        pendingClassification = null;
       }
 
       function downloadLedger() {
