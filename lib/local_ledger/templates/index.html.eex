@@ -144,7 +144,7 @@
           const data = JSON.parse(event.data);
           
           if (data.type === 'progress') {
-            statusDiv.textContent = 'Processing batch ' + data.current + ' of ' + data.total + '...';
+            statusDiv.textContent = 'Processing transaction ' + data.current + ' of ' + data.total + '...';
             statusDiv.style.color = '#858585';
           } else if (data.type === 'progress_message') {
             statusDiv.textContent = data.message;

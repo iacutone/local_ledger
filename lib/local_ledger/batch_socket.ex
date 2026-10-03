@@ -30,44 +30,24 @@ defmodule LocalLedger.BatchSocket do
 
             Task.start(fn ->
               try do
-                batches = LocalLedger.OllamaClient.parse_csv_and_prepare_batches(csv_content)
-                total_batches = length(batches)
+                progress = fn current, total ->
+                  send(ws_pid, {:batch_progress, current, total})
+                end
 
-                journal =
-                  Enum.with_index(batches, 1)
-                  |> Enum.map(fn {batch, index} ->
-                    send(ws_pid, {:batch_progress, index, total_batches})
+                case LocalLedger.Processor.process(csv_content, filename, progress: progress) do
+                  {:ok, %{journal: journal}} ->
+                    send(ws_pid, {:running_ledger})
 
-                    if index > 1 do
-                      Process.sleep(2000)
+                    case LocalLedger.LedgerCli.reports(journal) do
+                      {:ok, reports} ->
+                        send(ws_pid, {:report, reports, journal, LocalLedger.LedgerCli.download_name(journal, filename)})
+
+                      {:error, message} ->
+                        send(ws_pid, {:report_error, message, journal, LocalLedger.LedgerCli.download_name(journal, filename)})
                     end
 
-                    prompt =
-                      case filename do
-                        name when is_binary(name) and name != "" ->
-                          "Filename: #{name}\n\n#{batch}"
-
-                        _ ->
-                          batch
-                      end
-
-                    LocalLedger.OllamaClient.generate(prompt)
-                  end)
-                  |> Enum.reject(&(&1 == ""))
-                  |> Enum.join("\n\n")
-
-                if String.trim(journal) == "" do
-                  send(ws_pid, {:error, "The AI model returned no data. It may be warming up - please try again in a few seconds."})
-                else
-                  send(ws_pid, {:running_ledger})
-
-                  case LocalLedger.LedgerCli.reports(journal) do
-                    {:ok, reports} ->
-                      send(ws_pid, {:report, reports, journal, LocalLedger.LedgerCli.download_name(journal, filename)})
-
-                    {:error, message} ->
-                      send(ws_pid, {:report_error, message, journal, LocalLedger.LedgerCli.download_name(journal, filename)})
-                  end
+                  {:error, message} ->
+                    send(ws_pid, {:error, message})
                 end
               rescue
                 _e ->
