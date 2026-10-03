@@ -98,9 +98,13 @@ defmodule LocalLedger.Transaction do
   defp amount_value(values) do
     case first_value(values, ["amount"]) do
       "" ->
-        case first_value(values, ["debit"]) do
-          "" -> first_value(values, ["credit"])
-          debit -> negate_if_positive(debit)
+        case first_value(values, ["withdrawal", "debit"]) do
+          "" ->
+            case first_value(values, ["deposit", "credit"]) do
+              "" -> ""
+              deposit -> deposit
+            end
+          withdrawal -> negate_if_positive(withdrawal)
         end
 
       amount ->

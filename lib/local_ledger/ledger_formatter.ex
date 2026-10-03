@@ -45,14 +45,8 @@ defmodule LocalLedger.LedgerFormatter do
          |> Enum.join("\n")}
 
       kind when kind in [:expense, :refund] ->
-        with {:ok, classification} <- classify(transaction, opts),
-             true <- classification.account in LocalLedger.TransactionClassifier.allowed_accounts() do
-          expense_line =
-            if kind == :refund do
-              "\t#{classification.account}"
-            else
-              "\t#{classification.account}"
-            end
+        with {:ok, classification} <- classify(transaction, opts) do
+          expense_line = "\t#{classification.account}"
 
           {:ok,
            [
@@ -62,7 +56,6 @@ defmodule LocalLedger.LedgerFormatter do
            ]
            |> Enum.join("\n")}
         else
-          false -> {:error, "Classifier returned an account outside the allowlist."}
           {:error, reason} -> {:error, reason}
         end
     end

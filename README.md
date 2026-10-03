@@ -1,6 +1,6 @@
 # Local Ledger
 
-[Local Ledger](https://ledger.iacut.one): an application that parses credit-card CSV data with NimbleCSV, classifies merchants locally, and outputs Plain Text Accounting ([ledger](https://plaintextaccounting.org/)) format.
+[Local Ledger](https://local-ledger.com): an application that parses credit-card CSV data with NimbleCSV, classifies merchants locally, and outputs Plain Text Accounting ([ledger](https://plaintextaccounting.org/)) format.
 
 - CSV parsing, transaction types, balancing, and ledger generation are deterministic Elixir code.
 - Unknown merchants are classified by a local `qwen2.5:0.5b` Ollama model. When it cannot classify confidently, processing pauses for a user-selected account.

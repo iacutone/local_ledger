@@ -11,6 +11,7 @@ defmodule LocalLedger.Application do
 
     children = [
       {Finch, name: LocalLedger.Finch},
+      LocalLedger.MerchantMemory,
       :ranch.child_spec(:http, :ranch_tcp, [port: 4000], :cowboy_clear, %{env: %{dispatch: dispatch}})
     ]
 

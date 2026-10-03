@@ -49,27 +49,33 @@
         <button onclick="openInstructionsModal()" class="btn-secondary">Instructions</button>
         <button onclick="openAboutModal()" class="btn-secondary">About</button>
       </div>
+    </header>
+
+    <div class="main">
+      <p class="subtitle">Convert bank CSV exports to ledger-cli format using AI</p>
+      <div class="upload-area">
+        <input type="file" id="csvFile" accept=".csv" onchange="onFileSelected()" />
+        <button id="uploadBtn" onclick="uploadFile()" style="display:none;">Upload & Process</button>
+      </div>
+      <div id="status" class="status"></div>
+      <div id="classificationPrompt" class="response" style="display:none;margin-top:1rem;">
+        <strong>Category needed</strong>
+        <p id="classificationDetails"></p>
+        <p style="color:#858585;font-size:0.9rem;margin:0.5rem 0 0.75rem;">
+          The AI wasn't confident enough to auto-classify this transaction. Start typing below to search existing categories, or enter a new one using the format <code>Expenses:Category:Subcategory</code> (e.g. <code>Expenses:Food:Restaurants</code>). Your choice will be remembered for this merchant going forward.
+        </p>
+        <label for="entryName">Account</label>
+        <input id="entryName" list="accountOptions" style="width:100%;margin-top:0.5rem;" />
+        <datalist id="accountOptions"></datalist>
+        <button onclick="submitClassification()" style="margin-top:0.75rem;">Continue</button>
+      </div>
+      <button id="downloadBtn" style="display:none;margin-top:1rem;" onclick="downloadLedger()">Download Journal</button>
+      <div id="reports" style="display:none;">
+        <h2>Account balances</h2>
+        <div id="balance" class="response"></div>
+      </div>
+      <div id="response" class="response" style="display:none;"></div>
     </div>
-    
-    <input type="file" id="csvFile" accept=".csv" />
-    <button onclick="uploadFile()">Upload & Process</button>
-    <div id="status" class="status"></div>
-    <div id="classificationPrompt" class="response" style="display:none;margin-top:1rem;">
-      <strong>Category needed</strong>
-      <p id="classificationDetails"></p>
-      <label for="entryName">Entry name/account</label>
-      <input id="entryName" list="accountOptions" style="width:100%;margin-top:0.5rem;" />
-      <datalist id="accountOptions"></datalist>
-      <button onclick="submitClassification()" style="margin-top:0.75rem;">Continue</button>
-    </div>
-    <button id="downloadBtn" style="display:none;margin-top:1rem;" onclick="downloadLedger()">Download Journal</button>
-    <div id="reports" style="display:none;">
-      <h2>Account balances</h2>
-      <div id="balance" class="response"></div>
-      <h2 style="margin-top:2rem;">Register</h2>
-      <div id="register" class="response"></div>
-    </div>
-    <div id="response" class="response" style="display:none;"></div>
 
     <!-- Instructions Modal -->
     <div id="instructionsModal" class="modal" style="display:none;">
@@ -142,6 +148,10 @@
           alert('Please select a file');
           return;
         }
+
+        const uploadBtn = document.getElementById('uploadBtn');
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Processing...';
 
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -378,6 +388,7 @@
         white-space: nowrap;
       }
       button:hover { background: #6ed9c0; }
+      button:disabled { background: #555; color: #888; cursor: not-allowed; }
 
       .btn-secondary { background: #858585; color: #1e1e1e; }
       .btn-secondary:hover { background: #9e9e9e; }
@@ -405,6 +416,7 @@
       a { color: #4ec9b0; text-decoration: none; }
       a:hover { text-decoration: underline; }
       ul, ol { line-height: 1.8; }
+      code { background: #2d2d2d; padding: 0.1rem 0.35rem; border-radius: 3px; font-family: Monaco, monospace; font-size: 0.85em; color: #ce9178; }
 
       /* Modals */
       .modal {

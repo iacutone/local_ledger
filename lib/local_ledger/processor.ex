@@ -35,11 +35,10 @@ defmodule LocalLedger.Processor do
       callback when is_function(callback, 2) ->
         fn transaction, reason ->
           with {:ok, %{account: account} = classification} <- callback.(transaction, reason),
-               true <- account in LocalLedger.TransactionClassifier.allowed_accounts(),
                :ok <- LocalLedger.FeedbackStore.record(transaction, reason, account) do
+            LocalLedger.MerchantMemory.add(transaction.description, account)
             {:ok, Map.put_new(classification, :source, :user)}
           else
-            false -> {:error, "The selected account is not allowed."}
             {:error, reason} -> {:error, reason}
           end
         end
