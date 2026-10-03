@@ -47,7 +47,7 @@ defmodule LocalLedger.OllamaClient do
 
         _, acc ->
           acc
-      end)
+      end, receive_timeout: 300_000)
 
     case result do
       {:ok, acc} ->
