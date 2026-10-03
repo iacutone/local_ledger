@@ -65,6 +65,8 @@ COPY --from=build /app/mix.exs /app/mix.lock ./
 ENV MIX_ENV=prod
 ENV PORT=4000
 
+# Ollama runs on the Hetzner host, outside this image. The deployed container
+# reaches it through OLLAMA_BASE_URL configured in config/deploy.yml.
 EXPOSE 4000
 
 CMD ["mix", "run", "--no-halt"]

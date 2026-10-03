@@ -3,7 +3,10 @@ image: registry.iacutone.synology.me/local_ledger
 
 servers:
   web:
-    - "5.161.60.147"
+    hosts:
+      - "5.161.60.147"
+    options:
+      add-host: "host.docker.internal:host-gateway"
 
 registry:
   server: registry.iacutone.synology.me
@@ -27,6 +30,11 @@ env:
     SHELL: /bin/sh
   secret:
     - OLLAMA_BASE_URL
+    - OLLAMA_FALLBACK_BASE_URL
+    - OLLAMA_PRIMARY_MODEL
+    - OLLAMA_FALLBACK_MODEL
+    - CLASSIFIER_CONFIDENCE_THRESHOLD
+    - OLLAMA_TIMEOUT
 
 builder:
   arch: amd64
