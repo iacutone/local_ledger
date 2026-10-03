@@ -19,7 +19,7 @@ defmodule LocalLedger.OllamaClient do
         stream: true
       })
 
-    headers = [{"content-type", "application/json"}]
+    headers = [{"content-type", "application/json"}, {"ngrok-skip-browser-warning", "true"}]
 
     result =
       Finch.build(:post, url, headers, body)
@@ -47,7 +47,7 @@ defmodule LocalLedger.OllamaClient do
 
         _, acc ->
           acc
-      end)
+      end, receive_timeout: 300_000)
 
     case result do
       {:ok, acc} ->
@@ -79,10 +79,11 @@ defmodule LocalLedger.OllamaClient do
       stream: true
     })
 
-    headers = [{"content-type", "application/json"}]
+    headers = [{"content-type", "application/json"}, {"ngrok-skip-browser-warning", "true"}]
 
-    result = Finch.build(:post, url, headers, body)
-    |> Finch.stream(LocalLedger.Finch, "", fn
+    result =
+      Finch.build(:post, url, headers, body)
+      |> Finch.stream(LocalLedger.Finch, "", fn
       {:data, data}, buffer ->
         new_buffer = buffer <> data
         lines = String.split(new_buffer, "\n")
@@ -109,7 +110,7 @@ defmodule LocalLedger.OllamaClient do
         remaining
 
       _, buffer -> buffer
-    end)
+    end, [receive_timeout: 300_000])
 
     # Process any remaining buffer content
     case result do
@@ -119,7 +120,12 @@ defmodule LocalLedger.OllamaClient do
             send(pid, {:chunk, resp})
           _ -> :ok
         end
-      _ -> :ok
+      {:ok, _} ->
+        :ok
+      {:error, %Finch.TransportError{reason: :timeout}, _acc} ->
+        send(pid, {:error, "Ollama server timed out. It may be busy - please try again."})
+      {:error, _reason, _acc} ->
+        send(pid, {:error, "Ollama server not responding. Please try again later."})
     end
   end
 
@@ -132,7 +138,7 @@ defmodule LocalLedger.OllamaClient do
       stream: true
     })
 
-    headers = [{"content-type", "application/json"}]
+    headers = [{"content-type", "application/json"}, {"ngrok-skip-browser-warning", "true"}]
 
     result = Finch.build(:post, url, headers, body)
     |> Finch.stream(LocalLedger.Finch, {conn, ""}, fn
@@ -179,6 +185,8 @@ defmodule LocalLedger.OllamaClient do
   def parse_csv_and_prepare_batches(csv_content) do
     lines =
       csv_content
+      |> String.replace("\r\n", "\n")
+      |> String.replace("\r", "\n")
       |> String.trim()
       |> String.split("\n")
       |> Enum.filter(&(&1 != ""))
