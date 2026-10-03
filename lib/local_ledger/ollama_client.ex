@@ -220,8 +220,10 @@ defmodule LocalLedger.OllamaClient do
   end
 
   @doc """
-  Classifies one transaction with the small model and retries the complete
-  request against the configured fallback model when the answer is uncertain.
+  Classifies one transaction with the local model.
+
+  Low-confidence results are returned to the caller so the user can provide
+  the account rather than silently accepting a guess.
   """
   def classify(transaction, opts \\ []) do
     threshold =
@@ -243,27 +245,11 @@ defmodule LocalLedger.OllamaClient do
       {:ok, result} when result.confidence >= threshold ->
         {:ok, Map.put(result, :source, :small_model)}
 
-      _ ->
-        case Keyword.get(opts, :fallback_base_url, fallback_base_url()) do
-          nil ->
-            {:ok,
-             %{
-               account: "Expenses:Miscellaneous",
-               confidence: 0.0,
-               source: :safe_fallback
-             }}
+      {:ok, result} ->
+        {:error, {:low_confidence, result}}
 
-          fallback_url ->
-            case classify_with_model(
-                   transaction,
-                   fallback_url,
-                   Keyword.get(opts, :fallback_model, fallback_model()),
-                   opts
-                 ) do
-              {:ok, result} -> {:ok, Map.put(result, :source, :fallback_model)}
-              {:error, _reason} -> safe_classification()
-            end
-        end
+      {:error, reason} ->
+        {:error, {:classification_failed, reason}}
     end
   end
 
@@ -317,22 +303,10 @@ defmodule LocalLedger.OllamaClient do
 
   defp parse_classification(_), do: {:error, "Ollama returned no classification."}
 
-  defp safe_classification do
-    {:ok, %{account: "Expenses:Miscellaneous", confidence: 0.0, source: :safe_fallback}}
-  end
-
   defp primary_base_url do
     Application.get_env(:local_ledger, :ollama_base_url, "http://localhost:11434")
   end
 
-  defp fallback_base_url do
-    case Application.get_env(:local_ledger, :ollama_fallback_base_url) do
-      value when is_binary(value) and value != "" -> value
-      _ -> nil
-    end
-  end
-
   defp primary_model, do: Application.get_env(:local_ledger, :ollama_primary_model, "ledger-small")
-  defp fallback_model, do: Application.get_env(:local_ledger, :ollama_fallback_model, "ledger-fallback")
   defp classifier_timeout, do: Application.get_env(:local_ledger, :ollama_timeout, 120_000)
 end

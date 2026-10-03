@@ -3,7 +3,7 @@ defmodule LocalLedger.OllamaClientTest do
 
   alias LocalLedger.{OllamaClient, Transaction}
 
-  test "uses the fallback model for a low-confidence primary result" do
+  test "returns low confidence so the caller can request user input" do
     transaction = %Transaction{
       description: "UNKNOWN MERCHANT",
       category: "Shopping",
@@ -16,24 +16,19 @@ defmodule LocalLedger.OllamaClientTest do
         cond do
           base_url == "http://small" and model == "ledger-small" ->
             ~S({"response":"{\"account\":\"Expenses:Shopping\",\"confidence\":0.20}"})
-
-          base_url == "http://fallback" and model == "ledger-fallback" ->
-            ~S({"response":"{\"account\":\"Expenses:Food:Restaurants\",\"confidence\":0.91}"})
         end
 
       {:ok, %{status: 200, body: response}}
     end
 
-    assert {:ok, result} =
+    assert {:error, {:low_confidence, result}} =
              OllamaClient.classify(transaction,
                base_url: "http://small",
                model: "ledger-small",
-               fallback_base_url: "http://fallback",
-               fallback_model: "ledger-fallback",
                request_fun: request_fun
              )
 
-    assert result.account == "Expenses:Food:Restaurants"
-    assert result.source == :fallback_model
+    assert result.account == "Expenses:Shopping"
+    assert result.confidence == 0.2
   end
 end

@@ -19,6 +19,16 @@ defmodule LocalLedger.BatchSocket do
          |> Map.put(:pending_csv, csv_content)
          |> Map.put(:pending_filename, payload["filename"])}
 
+      {:ok, %{"action" => "classify", "row_number" => row_number, "account" => account}} ->
+        case Map.get(state, :worker_pid) do
+          pid when is_pid(pid) ->
+            send(pid, {:classification, row_number, account})
+            {:ok, state}
+
+          _ ->
+            {:ok, state}
+        end
+
       {:ok, %{"action" => "ready"}} ->
         case Map.get(state, :pending_csv) do
           nil ->
@@ -28,13 +38,33 @@ defmodule LocalLedger.BatchSocket do
             ws_pid = self()
             filename = Map.get(state, :pending_filename)
 
-            Task.start(fn ->
+            uncertain = fn transaction, reason ->
+              send(ws_pid, {:needs_classification, transaction, reason})
+
+              receive do
+                {:classification, row_number, account}
+                when row_number == transaction.row_number ->
+                  {:ok, %{account: account, confidence: 1.0}}
+
+                {:classification_cancelled, row_number}
+                when row_number == transaction.row_number ->
+                  {:error, "Classification cancelled for CSV row #{row_number}."}
+              after
+                600_000 -> {:error, "Timed out waiting for a category for CSV row #{transaction.row_number}."}
+              end
+            end
+
+            {:ok, worker_pid} =
+              Task.start(fn ->
               try do
                 progress = fn current, total ->
                   send(ws_pid, {:batch_progress, current, total})
                 end
 
-                case LocalLedger.Processor.process(csv_content, filename, progress: progress) do
+                case LocalLedger.Processor.process(csv_content, filename,
+                       progress: progress,
+                       uncertain: uncertain
+                     ) do
                   {:ok, %{journal: journal}} ->
                     send(ws_pid, {:running_ledger})
 
@@ -56,9 +86,13 @@ defmodule LocalLedger.BatchSocket do
                 :timeout ->
                   :ok
               end
-            end)
+              end)
 
-            {:ok, state |> Map.delete(:pending_csv) |> Map.delete(:pending_filename)}
+            {:ok,
+             state
+             |> Map.delete(:pending_csv)
+             |> Map.delete(:pending_filename)
+             |> Map.put(:worker_pid, worker_pid)}
         end
 
       _ ->
@@ -77,6 +111,32 @@ defmodule LocalLedger.BatchSocket do
 
   def websocket_info({:running_ledger}, state) do
     msg = JSON.encode!(%{type: "progress_message", message: "Running ledger…"})
+    {:reply, {:text, msg}, state}
+  end
+
+  def websocket_info({:needs_classification, transaction, reason}, state) do
+    {suggested_account, confidence} =
+      case reason do
+        {:low_confidence, result} ->
+          {Map.get(result, :account), Map.get(result, :confidence)}
+
+        _ ->
+          {nil, nil}
+      end
+
+    msg =
+      JSON.encode!(%{
+        type: "needs_classification",
+        row_number: transaction.row_number,
+        description: transaction.description,
+        bank_category: transaction.category,
+        transaction_type: transaction.type,
+        amount: transaction.amount,
+        suggested_account: suggested_account,
+        confidence: confidence,
+        accounts: LocalLedger.TransactionClassifier.allowed_accounts()
+      })
+
     {:reply, {:text, msg}, state}
   end
 

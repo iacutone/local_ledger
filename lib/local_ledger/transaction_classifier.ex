@@ -3,8 +3,8 @@ defmodule LocalLedger.TransactionClassifier do
   Selects an expense account for a normalized transaction.
 
   Obvious merchant mappings stay local and deterministic. Unknown merchants are
-  sent to the small Ollama classifier, which can delegate to the configured
-  fallback model when its answer is not confident.
+  sent to the small Ollama classifier. Low-confidence answers are returned to
+  the caller for user confirmation.
   """
 
   alias LocalLedger.Transaction

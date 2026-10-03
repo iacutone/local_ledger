@@ -12,5 +12,7 @@ defmodule LocalLedger.RouterTest do
     refute conn.resp_body =~ "type === 'chunk'"
     assert conn.resp_body =~ "data.download"
     assert conn.resp_body =~ "ledgerFilename"
+    assert conn.resp_body =~ "submitClassification"
+    assert conn.resp_body =~ "classificationPrompt"
   end
 end
