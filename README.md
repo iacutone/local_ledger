@@ -3,7 +3,7 @@
 [Local Ledger](https://ledger.iacut.one): an application that parses credit-card CSV data with NimbleCSV, classifies merchants locally, and outputs Plain Text Accounting ([ledger](https://plaintextaccounting.org/)) format.
 
 - CSV parsing, transaction types, balancing, and ledger generation are deterministic Elixir code.
-- Unknown merchants are classified by a local `qwen2.5:0.5b` Ollama model. When it cannot classify confidently, processing pauses for a user-selected account.
+- Unknown merchants are classified by Ollama's local `laya` decision model. When it cannot classify confidently, processing pauses for a user-selected account.
 - Financial data is sent only to the configured Ollama endpoints.
 
 ## Dependencies
@@ -15,8 +15,7 @@
 
 ## To Run
 
-- `ollama pull qwen2.5:0.5b`
-- `ollama create ledger-small -f Modelfile`
+- `ollama pull laya`
 - Configure `OLLAMA_BASE_URL` to the host Ollama service.
 - `mix run --no-halt`
 - Visit `http://localhost:4000`
@@ -67,17 +66,17 @@ Environment="OLLAMA_HOST=0.0.0.0:11434"
 EOF
 sudo systemctl daemon-reload
 sudo systemctl restart ollama
-ollama pull qwen2.5:0.5b
-ollama create ledger-small -f Modelfile
-curl http://127.0.0.1:11434/api/generate \
-  -d '{"model":"ledger-small","prompt":"Return JSON for COSTCO WHSE #1195","format":"json","stream":false}'
+ollama pull laya
+curl http://127.0.0.1:11434/v1/systemone \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"laya","state":{"description":"COSTCO WHSE #1195","bank_category":"Shopping","type":"Sale","amount":"-173.61"},"questions":{"group":{"type":"choice","instructions":"Which broad spending group best fits this transaction?","criteria":{"food":"groceries or restaurants","shopping":"general retail","other":"anything else"}}}}'
 ```
 
 The deployed container reaches host Ollama through
 `http://host.docker.internal:11434`; Kamal adds the Docker host-gateway
 mapping in `config/deploy.yml`. Keep port 11434 restricted to the host/private
 network. Ollama does not provide suitable authentication for an Internet-facing
-endpoint.
+endpoint. Laya requires Ollama 0.40.0 or newer.
 
 When the model is invalid or below `CLASSIFIER_CONFIDENCE_THRESHOLD` (default
 `0.80`), the browser asks for an account before processing continues.
@@ -85,6 +84,14 @@ Corrections are appended to `/data/classification_feedback.jsonl` on the
 mounted Hetzner volume. Records contain the merchant description, bank
 category, type, amount, model prediction, confidence, corrected account, and
 timestamp; dates and card identifiers are excluded.
+
+The uncertainty form also accepts a proposed new ledger account and parent
+group. Proposals are appended to
+`/data/category_proposals.jsonl` with a `pending` status, but they are not
+used for the current transaction and do not change the active classifier
+allowlist. Review and approve proposals separately before adding them to the
+account taxonomy. Set `CATEGORY_PROPOSAL_PATH` to override the proposal
+storage path.
 
 ## CSV behavior
 
@@ -95,5 +102,8 @@ including `Post Date`, `Posted Date`, `Posting Date`, `Transaction Date`,
 
 Known merchants use deterministic rules before Ollama is called. Payment,
 return, adjustment, amount-sign, card-account, and balancing rules never come
-from the model. Model classifications and user corrections are restricted to
-the account allowlist.
+from the model. Laya classifies broad groups and then leaf accounts because a
+single choice question should stay below its option limit. Model
+classifications and user corrections are restricted to the account allowlist.
+New category proposals are intentionally restricted to valid ledger account
+names and existing parent groups, but remain inactive until approved.

@@ -45,9 +45,8 @@ defmodule LocalLedger.Processor do
         end
 
       _ ->
-        fn _transaction, reason -> {:error, reason}
+        fn _transaction, reason -> {:error, reason} end
     end
-  end
   end
 
   defp normalize_rows(rows) do

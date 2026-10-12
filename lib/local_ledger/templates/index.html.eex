@@ -61,17 +61,25 @@
     <div id="classificationPrompt" class="response" style="display:none;margin-top:1rem;">
       <strong>Category needed</strong>
       <p id="classificationDetails"></p>
+      <p>Choose an active account for this transaction. A new category proposal is saved for review and does not become active automatically.</p>
       <label for="entryName">Entry name/account</label>
       <input id="entryName" list="accountOptions" style="width:100%;margin-top:0.5rem;" />
       <datalist id="accountOptions"></datalist>
       <button onclick="submitClassification()" style="margin-top:0.75rem;">Continue</button>
+      <hr style="margin:1.25rem 0;border-color:#3e3e42;">
+      <strong>Propose a new category</strong>
+      <p style="font-size:0.9rem;">Use a ledger account name such as <code>Expenses:Education</code>. It will be recorded as pending and will not be used for this transaction.</p>
+      <label for="proposalGroup">Parent group</label>
+      <select id="proposalGroup" style="width:100%;margin-top:0.5rem;"></select>
+      <label for="proposalAccount" style="display:block;margin-top:0.75rem;">Proposed account</label>
+      <input id="proposalAccount" placeholder="Expenses:Education" style="width:100%;margin-top:0.5rem;" />
+      <button onclick="submitCategoryProposal()" style="margin-top:0.75rem;background:#858585;">Save proposal</button>
+      <p id="proposalStatus" style="font-size:0.9rem;"></p>
     </div>
     <button id="downloadBtn" style="display:none;margin-top:1rem;" onclick="downloadLedger()">Download Journal</button>
     <div id="reports" style="display:none;">
       <h2>Account balances</h2>
       <div id="balance" class="response"></div>
-      <h2 style="margin-top:2rem;">Register</h2>
-      <div id="register" class="response"></div>
     </div>
     <div id="response" class="response" style="display:none;"></div>
     </main>
@@ -199,9 +207,26 @@
               option.value = account;
               options.appendChild(option);
             });
+            const groups = document.getElementById('proposalGroup');
+            groups.innerHTML = '';
+            Object.entries(data.groups || {}).forEach(function(entry) {
+              const option = document.createElement('option');
+              option.value = entry[0];
+              option.textContent = entry[0] + ' — ' + entry[1];
+              groups.appendChild(option);
+            });
+            document.getElementById('proposalAccount').value = '';
+            document.getElementById('proposalStatus').textContent = '';
             document.getElementById('classificationPrompt').style.display = 'block';
             statusDiv.textContent = 'Please choose an account to continue';
             statusDiv.style.color = '#dcdcaa';
+          } else if (data.type === 'category_proposal_recorded') {
+            document.getElementById('proposalStatus').textContent =
+              'Proposal saved: ' + data.account + '. Choose an active account above to continue.';
+            document.getElementById('proposalStatus').style.color = '#4ec9b0';
+          } else if (data.type === 'category_proposal_error') {
+            document.getElementById('proposalStatus').textContent = data.message;
+            document.getElementById('proposalStatus').style.color = '#f48771';
           } else if (data.type === 'progress_message') {
             statusDiv.textContent = data.message;
             statusDiv.style.color = '#858585';
@@ -269,6 +294,24 @@
         document.getElementById('classificationPrompt').style.display = 'none';
         document.getElementById('status').textContent = 'Continuing...';
         pendingClassification = null;
+      }
+
+      function submitCategoryProposal() {
+        const account = document.getElementById('proposalAccount').value.trim();
+        const group = document.getElementById('proposalGroup').value;
+        if (!activeWebSocket || !pendingClassification || !account || !group) {
+          alert('Enter a proposed account and choose a parent group');
+          return;
+        }
+
+        activeWebSocket.send(JSON.stringify({
+          action: 'propose_category',
+          row_number: pendingClassification.row_number,
+          account: account,
+          group: group
+        }));
+        document.getElementById('proposalStatus').textContent = 'Saving proposal...';
+        document.getElementById('proposalStatus').style.color = '#858585';
       }
 
       function downloadLedger() {

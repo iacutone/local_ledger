@@ -22,7 +22,12 @@ defmodule LocalLedger.FeedbackStore do
       "recorded_at" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
 
-    path = Application.get_env(:local_ledger, :feedback_path, "priv/data/classification_feedback.jsonl")
+    path =
+      Application.get_env(
+        :local_ledger,
+        :feedback_path,
+        "priv/data/classification_feedback.jsonl"
+      )
 
     try do
       path |> Path.dirname() |> File.mkdir_p!()

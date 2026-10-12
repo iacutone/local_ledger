@@ -53,7 +53,9 @@ defmodule LocalLedger.CsvParser do
   end
 
   defp parser_for(header_line) do
-    if String.contains?(header_line, "\t"), do: LocalLedger.CsvParser.Tab, else: LocalLedger.CsvParser.Comma
+    if String.contains?(header_line, "\t"),
+      do: LocalLedger.CsvParser.Tab,
+      else: LocalLedger.CsvParser.Comma
   end
 
   defp non_empty_rows(rows) do

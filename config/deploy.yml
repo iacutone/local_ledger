@@ -32,9 +32,10 @@ env:
     PORT: 4000
     SHELL: /bin/sh
     FEEDBACK_PATH: /data/classification_feedback.jsonl
+    CATEGORY_PROPOSAL_PATH: /data/category_proposals.jsonl
   secret:
     - OLLAMA_BASE_URL
-    - OLLAMA_PRIMARY_MODEL
+    - LAYA_MODEL
     - CLASSIFIER_CONFIDENCE_THRESHOLD
     - OLLAMA_TIMEOUT
 

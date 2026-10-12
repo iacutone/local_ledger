@@ -2,7 +2,12 @@ defmodule LocalLedger.ProcessorTest do
   use ExUnit.Case, async: false
 
   test "requests and records a user correction for an uncertain model result" do
-    path = Path.join(System.tmp_dir!(), "local-ledger-processor-#{System.unique_integer([:positive])}.jsonl")
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "local-ledger-processor-#{System.unique_integer([:positive])}.jsonl"
+      )
+
     Application.put_env(:local_ledger, :feedback_path, path)
 
     on_exit(fn ->

@@ -46,7 +46,8 @@ defmodule LocalLedger.LedgerFormatter do
 
       kind when kind in [:expense, :refund] ->
         with {:ok, classification} <- classify(transaction, opts),
-             true <- classification.account in LocalLedger.TransactionClassifier.allowed_accounts() do
+             true <-
+               classification.account in LocalLedger.TransactionClassifier.allowed_accounts() do
           expense_line =
             if kind == :refund do
               "\t#{classification.account}"
@@ -71,8 +72,8 @@ defmodule LocalLedger.LedgerFormatter do
   defp classify(transaction, opts) do
     result =
       case Keyword.get(opts, :classifier) do
-      classifier when is_function(classifier, 1) -> classifier.(transaction)
-      _ -> LocalLedger.TransactionClassifier.classify(transaction, opts)
+        classifier when is_function(classifier, 1) -> classifier.(transaction)
+        _ -> LocalLedger.TransactionClassifier.classify(transaction, opts)
       end
 
     case result do
@@ -89,7 +90,12 @@ defmodule LocalLedger.LedgerFormatter do
 
   defp header(transaction) do
     metadata =
-      [transaction.transaction_date, transaction.description, transaction.category, transaction.type]
+      [
+        transaction.transaction_date,
+        transaction.description,
+        transaction.category,
+        transaction.type
+      ]
       |> Enum.map(&String.trim(to_string(&1 || "")))
       |> Enum.reject(&(&1 == ""))
       |> Enum.join("; ")

@@ -4,7 +4,12 @@ defmodule LocalLedger.FeedbackStoreTest do
   alias LocalLedger.{FeedbackStore, Transaction}
 
   test "stores minimal correction data without dates or card identifiers" do
-    path = Path.join(System.tmp_dir!(), "local-ledger-feedback-#{System.unique_integer([:positive])}.jsonl")
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "local-ledger-feedback-#{System.unique_integer([:positive])}.jsonl"
+      )
+
     Application.put_env(:local_ledger, :feedback_path, path)
 
     on_exit(fn ->
@@ -25,8 +30,7 @@ defmodule LocalLedger.FeedbackStoreTest do
     assert :ok =
              FeedbackStore.record(
                transaction,
-               {:low_confidence,
-                %{account: "Expenses:Shopping", confidence: 0.42}},
+               {:low_confidence, %{account: "Expenses:Shopping", confidence: 0.42}},
                "Expenses:Food:Groceries"
              )
 

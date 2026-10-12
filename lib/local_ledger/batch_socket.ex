@@ -29,6 +29,22 @@ defmodule LocalLedger.BatchSocket do
             {:ok, state}
         end
 
+      {:ok,
+       %{
+         "action" => "propose_category",
+         "row_number" => row_number,
+         "account" => account,
+         "group" => group
+       }} ->
+        case Map.get(state, :worker_pid) do
+          pid when is_pid(pid) ->
+            send(pid, {:category_proposal, row_number, account, group})
+            {:ok, state}
+
+          _ ->
+            {:ok, state}
+        end
+
       {:ok, %{"action" => "ready"}} ->
         case Map.get(state, :pending_csv) do
           nil ->
@@ -40,52 +56,52 @@ defmodule LocalLedger.BatchSocket do
 
             uncertain = fn transaction, reason ->
               send(ws_pid, {:needs_classification, transaction, reason})
-
-              receive do
-                {:classification, row_number, account}
-                when row_number == transaction.row_number ->
-                  {:ok, %{account: account, confidence: 1.0}}
-
-                {:classification_cancelled, row_number}
-                when row_number == transaction.row_number ->
-                  {:error, "Classification cancelled for CSV row #{row_number}."}
-              after
-                600_000 -> {:error, "Timed out waiting for a category for CSV row #{transaction.row_number}."}
-              end
+              await_classification(ws_pid, transaction, reason)
             end
 
             {:ok, worker_pid} =
               Task.start(fn ->
-              try do
-                progress = fn current, total ->
-                  send(ws_pid, {:batch_progress, current, total})
+                try do
+                  progress = fn current, total ->
+                    send(ws_pid, {:batch_progress, current, total})
+                  end
+
+                  case LocalLedger.Processor.process(csv_content, filename,
+                         progress: progress,
+                         uncertain: uncertain
+                       ) do
+                    {:ok, %{journal: journal}} ->
+                      send(ws_pid, {:running_ledger})
+
+                      case LocalLedger.LedgerCli.reports(journal) do
+                        {:ok, reports} ->
+                          send(
+                            ws_pid,
+                            {:report, reports, journal,
+                             LocalLedger.LedgerCli.download_name(journal, filename)}
+                          )
+
+                        {:error, message} ->
+                          send(
+                            ws_pid,
+                            {:report_error, message, journal,
+                             LocalLedger.LedgerCli.download_name(journal, filename)}
+                          )
+                      end
+
+                    {:error, message} ->
+                      send(ws_pid, {:error, message})
+                  end
+                rescue
+                  _e ->
+                    send(
+                      ws_pid,
+                      {:error, "An error occurred during processing. Please try again."}
+                    )
+                catch
+                  :timeout ->
+                    :ok
                 end
-
-                case LocalLedger.Processor.process(csv_content, filename,
-                       progress: progress,
-                       uncertain: uncertain
-                     ) do
-                  {:ok, %{journal: journal}} ->
-                    send(ws_pid, {:running_ledger})
-
-                    case LocalLedger.LedgerCli.reports(journal) do
-                      {:ok, reports} ->
-                        send(ws_pid, {:report, reports, journal, LocalLedger.LedgerCli.download_name(journal, filename)})
-
-                      {:error, message} ->
-                        send(ws_pid, {:report_error, message, journal, LocalLedger.LedgerCli.download_name(journal, filename)})
-                    end
-
-                  {:error, message} ->
-                    send(ws_pid, {:error, message})
-                end
-              rescue
-                e ->
-                  send(ws_pid, {:error, "An error occurred: #{Exception.message(e)}"})
-              catch
-                :timeout ->
-                  :ok
-              end
               end)
 
             {:ok,
@@ -134,7 +150,30 @@ defmodule LocalLedger.BatchSocket do
         amount: transaction.amount,
         suggested_account: suggested_account,
         confidence: confidence,
-        accounts: LocalLedger.TransactionClassifier.allowed_accounts()
+        accounts: LocalLedger.TransactionClassifier.allowed_accounts(),
+        groups: LocalLedger.TransactionClassifier.group_criteria()
+      })
+
+    {:reply, {:text, msg}, state}
+  end
+
+  def websocket_info({:category_proposal_recorded, row_number, account}, state) do
+    msg =
+      JSON.encode!(%{
+        type: "category_proposal_recorded",
+        row_number: row_number,
+        account: account
+      })
+
+    {:reply, {:text, msg}, state}
+  end
+
+  def websocket_info({:category_proposal_error, row_number, message}, state) do
+    msg =
+      JSON.encode!(%{
+        type: "category_proposal_error",
+        row_number: row_number,
+        message: message
       })
 
     {:reply, {:text, msg}, state}
@@ -164,11 +203,6 @@ defmodule LocalLedger.BatchSocket do
     {:reply, {:text, msg}, state}
   end
 
-  def websocket_info({:retry, index, total, retries_left}, state) do
-    msg = JSON.encode!(%{type: "progress", current: index, total: total, message: "Batch #{index} timed out, retrying (#{retries_left} left)..."})
-    {:reply, {:text, msg}, state}
-  end
-
   def websocket_info({:error, message}, state) do
     msg = JSON.encode!(%{type: "error", message: message})
     {:reply, {:text, msg}, state}
@@ -182,19 +216,34 @@ defmodule LocalLedger.BatchSocket do
     {:ok, state}
   end
 
-  def terminate(_reason, _req, _state) do
-    :ok
+  defp await_classification(ws_pid, transaction, reason) do
+    receive do
+      {:classification, row_number, account}
+      when row_number == transaction.row_number ->
+        {:ok, %{account: account, confidence: 1.0}}
+
+      {:category_proposal, row_number, account, group}
+      when row_number == transaction.row_number ->
+        case LocalLedger.CategoryProposalStore.record(transaction, reason, account, group) do
+          :ok ->
+            send(ws_pid, {:category_proposal_recorded, row_number, account})
+            await_classification(ws_pid, transaction, reason)
+
+          {:error, message} ->
+            send(ws_pid, {:category_proposal_error, row_number, message})
+            await_classification(ws_pid, transaction, reason)
+        end
+
+      {:classification_cancelled, row_number}
+      when row_number == transaction.row_number ->
+        {:error, "Classification cancelled for CSV row #{row_number}."}
+    after
+      600_000 ->
+        {:error, "Timed out waiting for a category for CSV row #{transaction.row_number}."}
+    end
   end
 
-  defp generate_with_retry(prompt, retries_left, ws_pid, index, total) do
-    result = LocalLedger.OllamaClient.generate(prompt)
-
-    if result == "" and retries_left > 0 do
-      send(ws_pid, {:retry, index, total, retries_left})
-      Process.sleep(5_000)
-      generate_with_retry(prompt, retries_left - 1, ws_pid, index, total)
-    else
-      result
-    end
+  def terminate(_reason, _req, _state) do
+    :ok
   end
 end

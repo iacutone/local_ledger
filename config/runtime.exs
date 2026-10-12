@@ -9,9 +9,11 @@ ollama_base_url =
 
 config :local_ledger,
   ollama_base_url: ollama_base_url,
-  ollama_primary_model: System.get_env("OLLAMA_PRIMARY_MODEL", "ledger-small"),
+  laya_model: System.get_env("LAYA_MODEL", "laya"),
   classifier_confidence_threshold:
     System.get_env("CLASSIFIER_CONFIDENCE_THRESHOLD", "0.80") |> String.to_float(),
   ollama_timeout: System.get_env("OLLAMA_TIMEOUT", "120000") |> String.to_integer(),
   feedback_path: System.get_env("FEEDBACK_PATH", "priv/data/classification_feedback.jsonl"),
+  category_proposal_path:
+    System.get_env("CATEGORY_PROPOSAL_PATH", "priv/data/category_proposals.jsonl"),
   ledger_bin: System.get_env("LEDGER_BIN", "ledger")

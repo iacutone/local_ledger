@@ -29,7 +29,9 @@ defmodule LocalLedger.Transaction do
 
   @spec from_row(map()) :: {:ok, t()} | {:error, String.t()}
   def from_row(%{row_number: row_number, values: values}) do
-    post_date = first_value(values, ["post_date", "posted_date", "posting_date", "transaction_date", "date"])
+    post_date =
+      first_value(values, ["post_date", "posted_date", "posting_date", "transaction_date", "date"])
+
     transaction_date = first_value(values, ["transaction_date", "date", "post_date"])
     description = first_value(values, @description_fields)
     amount = amount_value(values)
