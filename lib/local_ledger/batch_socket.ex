@@ -19,6 +19,32 @@ defmodule LocalLedger.BatchSocket do
          |> Map.put(:pending_csv, csv_content)
          |> Map.put(:pending_filename, payload["filename"])}
 
+      {:ok, %{"action" => "classify", "row_number" => row_number, "account" => account}} ->
+        case Map.get(state, :worker_pid) do
+          pid when is_pid(pid) ->
+            send(pid, {:classification, row_number, account})
+            {:ok, state}
+
+          _ ->
+            {:ok, state}
+        end
+
+      {:ok,
+       %{
+         "action" => "propose_category",
+         "row_number" => row_number,
+         "account" => account,
+         "group" => group
+       }} ->
+        case Map.get(state, :worker_pid) do
+          pid when is_pid(pid) ->
+            send(pid, {:category_proposal, row_number, account, group})
+            {:ok, state}
+
+          _ ->
+            {:ok, state}
+        end
+
       {:ok, %{"action" => "ready"}} ->
         case Map.get(state, :pending_csv) do
           nil ->
@@ -28,57 +54,61 @@ defmodule LocalLedger.BatchSocket do
             ws_pid = self()
             filename = Map.get(state, :pending_filename)
 
-            Task.start(fn ->
-              try do
-                batches = LocalLedger.OllamaClient.parse_csv_and_prepare_batches(csv_content)
-                total_batches = length(batches)
+            uncertain = fn transaction, reason ->
+              send(ws_pid, {:needs_classification, transaction, reason})
+              await_classification(ws_pid, transaction, reason)
+            end
 
-                journal =
-                  Enum.with_index(batches, 1)
-                  |> Enum.map(fn {batch, index} ->
-                    send(ws_pid, {:batch_progress, index, total_batches})
+            {:ok, worker_pid} =
+              Task.start(fn ->
+                try do
+                  progress = fn current, total ->
+                    send(ws_pid, {:batch_progress, current, total})
+                  end
 
-                    if index > 1 do
-                      Process.sleep(2000)
-                    end
+                  case LocalLedger.Processor.process(csv_content, filename,
+                         progress: progress,
+                         uncertain: uncertain
+                       ) do
+                    {:ok, %{journal: journal}} ->
+                      send(ws_pid, {:running_ledger})
 
-                    prompt =
-                      case filename do
-                        name when is_binary(name) and name != "" ->
-                          "Filename: #{name}\n\n#{batch}"
+                      case LocalLedger.LedgerCli.reports(journal) do
+                        {:ok, reports} ->
+                          send(
+                            ws_pid,
+                            {:report, reports, journal,
+                             LocalLedger.LedgerCli.download_name(journal, filename)}
+                          )
 
-                        _ ->
-                          batch
+                        {:error, message} ->
+                          send(
+                            ws_pid,
+                            {:report_error, message, journal,
+                             LocalLedger.LedgerCli.download_name(journal, filename)}
+                          )
                       end
 
-                    generate_with_retry(prompt, 3, ws_pid, index, total_batches)
-                  end)
-                  |> Enum.reject(&(&1 == ""))
-                  |> Enum.join("\n\n")
-
-                if String.trim(journal) == "" do
-                  send(ws_pid, {:error, "The AI model returned no data. It may be warming up - please try again in a few seconds."})
-                else
-                  send(ws_pid, {:running_ledger})
-
-                  case LocalLedger.LedgerCli.reports(journal) do
-                    {:ok, reports} ->
-                      send(ws_pid, {:report, reports, journal, LocalLedger.LedgerCli.download_name(journal, filename)})
-
                     {:error, message} ->
-                      send(ws_pid, {:report_error, message, journal, LocalLedger.LedgerCli.download_name(journal, filename)})
+                      send(ws_pid, {:error, message})
                   end
+                rescue
+                  _e ->
+                    send(
+                      ws_pid,
+                      {:error, "An error occurred during processing. Please try again."}
+                    )
+                catch
+                  :timeout ->
+                    :ok
                 end
-              rescue
-                e ->
-                  send(ws_pid, {:error, "An error occurred: #{Exception.message(e)}"})
-              catch
-                :timeout ->
-                  :ok
-              end
-            end)
+              end)
 
-            {:ok, state |> Map.delete(:pending_csv) |> Map.delete(:pending_filename)}
+            {:ok,
+             state
+             |> Map.delete(:pending_csv)
+             |> Map.delete(:pending_filename)
+             |> Map.put(:worker_pid, worker_pid)}
         end
 
       _ ->
@@ -97,6 +127,55 @@ defmodule LocalLedger.BatchSocket do
 
   def websocket_info({:running_ledger}, state) do
     msg = JSON.encode!(%{type: "progress_message", message: "Running ledger…"})
+    {:reply, {:text, msg}, state}
+  end
+
+  def websocket_info({:needs_classification, transaction, reason}, state) do
+    {suggested_account, confidence} =
+      case reason do
+        {:low_confidence, result} ->
+          {Map.get(result, :account), Map.get(result, :confidence)}
+
+        _ ->
+          {nil, nil}
+      end
+
+    msg =
+      JSON.encode!(%{
+        type: "needs_classification",
+        row_number: transaction.row_number,
+        description: transaction.description,
+        bank_category: transaction.category,
+        transaction_type: transaction.type,
+        amount: transaction.amount,
+        suggested_account: suggested_account,
+        confidence: confidence,
+        accounts: LocalLedger.TransactionClassifier.allowed_accounts(),
+        groups: LocalLedger.TransactionClassifier.group_criteria()
+      })
+
+    {:reply, {:text, msg}, state}
+  end
+
+  def websocket_info({:category_proposal_recorded, row_number, account}, state) do
+    msg =
+      JSON.encode!(%{
+        type: "category_proposal_recorded",
+        row_number: row_number,
+        account: account
+      })
+
+    {:reply, {:text, msg}, state}
+  end
+
+  def websocket_info({:category_proposal_error, row_number, message}, state) do
+    msg =
+      JSON.encode!(%{
+        type: "category_proposal_error",
+        row_number: row_number,
+        message: message
+      })
+
     {:reply, {:text, msg}, state}
   end
 
@@ -124,11 +203,6 @@ defmodule LocalLedger.BatchSocket do
     {:reply, {:text, msg}, state}
   end
 
-  def websocket_info({:retry, index, total, retries_left}, state) do
-    msg = JSON.encode!(%{type: "progress", current: index, total: total, message: "Batch #{index} timed out, retrying (#{retries_left} left)..."})
-    {:reply, {:text, msg}, state}
-  end
-
   def websocket_info({:error, message}, state) do
     msg = JSON.encode!(%{type: "error", message: message})
     {:reply, {:text, msg}, state}
@@ -142,19 +216,34 @@ defmodule LocalLedger.BatchSocket do
     {:ok, state}
   end
 
-  def terminate(_reason, _req, _state) do
-    :ok
+  defp await_classification(ws_pid, transaction, reason) do
+    receive do
+      {:classification, row_number, account}
+      when row_number == transaction.row_number ->
+        {:ok, %{account: account, confidence: 1.0}}
+
+      {:category_proposal, row_number, account, group}
+      when row_number == transaction.row_number ->
+        case LocalLedger.CategoryProposalStore.record(transaction, reason, account, group) do
+          :ok ->
+            send(ws_pid, {:category_proposal_recorded, row_number, account})
+            await_classification(ws_pid, transaction, reason)
+
+          {:error, message} ->
+            send(ws_pid, {:category_proposal_error, row_number, message})
+            await_classification(ws_pid, transaction, reason)
+        end
+
+      {:classification_cancelled, row_number}
+      when row_number == transaction.row_number ->
+        {:error, "Classification cancelled for CSV row #{row_number}."}
+    after
+      600_000 ->
+        {:error, "Timed out waiting for a category for CSV row #{transaction.row_number}."}
+    end
   end
 
-  defp generate_with_retry(prompt, retries_left, ws_pid, index, total) do
-    result = LocalLedger.OllamaClient.generate(prompt)
-
-    if result == "" and retries_left > 0 do
-      send(ws_pid, {:retry, index, total, retries_left})
-      Process.sleep(5_000)
-      generate_with_retry(prompt, retries_left - 1, ws_pid, index, total)
-    else
-      result
-    end
+  def terminate(_reason, _req, _state) do
+    :ok
   end
 end

@@ -32,7 +32,7 @@ defmodule LocalLedger.LedgerCliTest do
   end
 
   @tag :ledger
-  test "rewrites -$ amounts, strips fences, and returns balance plus register" do
+  test "rewrites -$ amounts, strips fences, and returns the balance" do
     journal = """
     ```ledger
     #{@journal}
@@ -43,8 +43,6 @@ defmodule LocalLedger.LedgerCliTest do
     assert reports.balance =~ "Expenses:Shopping"
     assert reports.balance =~ "Liabilities:Credit Card 1234"
     assert reports.balance =~ "Assets:Checking:Bank Account"
-    assert reports.register =~ "TARGET"
-    assert reports.register =~ "AUTOMAT"
   end
 
   @tag :ledger

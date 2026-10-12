@@ -28,7 +28,8 @@ defmodule LocalLedger.MixProject do
   defp deps do
     [
       {:plug_cowboy, "~> 2.7"},
-      {:finch, "~> 0.16"}
+      {:finch, "~> 0.16"},
+      {:nimble_csv, "~> 1.3"}
     ]
   end
 end

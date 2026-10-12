@@ -1,229 +1,164 @@
 defmodule LocalLedger.OllamaClient do
   @moduledoc """
-  Client for interacting with Ollama API with streaming support.
+  Client for Ollama's Jev-compatible Laya decision endpoint.
   """
 
-  @ollama_model "ledger"
+  @spec classify(LocalLedger.Transaction.t(), keyword()) ::
+          {:ok, %{account: String.t(), confidence: float(), source: atom()}}
+          | {:error, term()}
+  def classify(transaction, opts \\ []) do
+    threshold =
+      Keyword.get(
+        opts,
+        :confidence_threshold,
+        Application.get_env(:local_ledger, :classifier_confidence_threshold, 0.80)
+      )
 
-  defp base_url do
-    Application.get_env(:local_ledger, :ollama_base_url, "http://localhost:11434")
+    case choose_group(transaction, opts) do
+      {:ok, group_answer} ->
+        case confident_choice(group_answer, threshold) do
+          {:ok, group, _group_confidence} ->
+            with {:ok, account_answer} <- choose_account(transaction, group, opts),
+                 {:ok, account, confidence} <- confident_choice(account_answer, threshold) do
+              {:ok, %{account: account, confidence: confidence, source: :laya}}
+            else
+              {:error, {:low_confidence, result}} -> {:error, {:low_confidence, result}}
+              {:error, reason} -> {:error, {:classification_failed, reason}}
+            end
+
+          {:error, {:low_confidence, result}} ->
+            {:error, {:low_confidence, Map.put(result, :account, nil)}}
+
+          {:error, reason} ->
+            {:error, {:classification_failed, reason}}
+        end
+
+      {:error, reason} ->
+        {:error, {:classification_failed, reason}}
+    end
   end
 
-  def generate(content) do
-    url = "#{base_url()}/api/generate"
+  defp choose_group(transaction, opts) do
+    questions = %{
+      "group" => %{
+        "type" => "choice",
+        "instructions" => "Which broad spending group best fits this transaction?",
+        "criteria" => LocalLedger.TransactionClassifier.group_criteria()
+      }
+    }
+
+    request(transaction_state(transaction), questions, opts)
+  end
+
+  defp choose_account(transaction, group, opts) do
+    accounts = LocalLedger.TransactionClassifier.accounts_for_group(group)
+
+    criteria =
+      Map.new(accounts, fn account ->
+        {account, account_description(account)}
+      end)
+
+    questions = %{
+      "account" => %{
+        "type" => "choice",
+        "instructions" => "Which ledger account best fits this transaction?",
+        "criteria" => criteria
+      }
+    }
+
+    request(transaction_state(transaction), questions, opts)
+  end
+
+  defp request(state, questions, opts) do
+    base_url = Keyword.get(opts, :base_url, base_url())
+    model = Keyword.get(opts, :model, model())
+    timeout = Keyword.get(opts, :timeout, timeout())
 
     body =
       JSON.encode!(%{
-        model: @ollama_model,
-        prompt: content,
-        stream: true
+        model: model,
+        state: state,
+        questions: questions
       })
 
-    headers = [{"content-type", "application/json"}, {"ngrok-skip-browser-warning", "true"}]
+    request =
+      Finch.build(
+        :post,
+        "#{String.trim_trailing(base_url, "/")}/v1/systemone",
+        [{"content-type", "application/json"}],
+        body
+      )
 
     result =
-      Finch.build(:post, url, headers, body)
-      |> Finch.stream(LocalLedger.Finch, %{buffer: "", collected: ""}, fn
-        {:data, data}, acc ->
-          new_buffer = acc.buffer <> data
-          lines = String.split(new_buffer, "\n")
-
-          {complete_lines, remaining} =
-            if length(lines) > 1 do
-              {Enum.take(lines, length(lines) - 1), List.last(lines)}
-            else
-              {[], new_buffer}
-            end
-
-          collected =
-            Enum.reduce(complete_lines, acc.collected, fn line, col ->
-              case decode_response(line) do
-                {:ok, resp} -> col <> resp
-                :skip -> col
-              end
-            end)
-
-          %{buffer: remaining, collected: collected}
-
-        _, acc ->
-          acc
-      end, receive_timeout: 300_000)
-
-    case result do
-      {:ok, acc} ->
-        case decode_response(acc.buffer) do
-          {:ok, resp} -> acc.collected <> resp
-          :skip -> acc.collected
-        end
-
-      {:error, _reason} ->
-        ""
-    end
-  end
-
-  defp decode_response(""), do: :skip
-
-  defp decode_response(line) do
-    case JSON.decode(line) do
-      {:ok, %{"response" => resp}} when is_binary(resp) and resp != "" -> {:ok, resp}
-      _ -> :skip
-    end
-  end
-
-  def stream_batch_to_pid(content, pid) do
-    url = "#{base_url()}/api/generate"
-
-    body = JSON.encode!(%{
-      model: @ollama_model,
-      prompt: content,
-      stream: true
-    })
-
-    headers = [{"content-type", "application/json"}, {"ngrok-skip-browser-warning", "true"}]
-
-    result =
-      Finch.build(:post, url, headers, body)
-      |> Finch.stream(LocalLedger.Finch, "", fn
-      {:data, data}, buffer ->
-        new_buffer = buffer <> data
-        lines = String.split(new_buffer, "\n")
-
-        {complete_lines, remaining} =
-          if length(lines) > 1 do
-            {Enum.take(lines, length(lines) - 1), List.last(lines)}
-          else
-            {[], new_buffer}
-          end
-
-        Enum.each(complete_lines, fn line ->
-          if line != "" do
-            case JSON.decode(line) do
-              {:ok, %{"response" => resp, "done" => false}} when is_binary(resp) and resp != "" ->
-                send(pid, {:chunk, resp})
-              {:ok, %{"response" => resp}} when is_binary(resp) and resp != "" ->
-                send(pid, {:chunk, resp})
-              _ -> :ok
-            end
-          end
-        end)
-
-        remaining
-
-      _, buffer -> buffer
-    end, [receive_timeout: 300_000])
-
-    # Process any remaining buffer content
-    case result do
-      {:ok, remaining_buffer} when remaining_buffer != "" ->
-        case JSON.decode(remaining_buffer) do
-          {:ok, %{"response" => resp}} when is_binary(resp) ->
-            send(pid, {:chunk, resp})
-          _ -> :ok
-        end
-      {:ok, _} ->
-        :ok
-      {:error, %Finch.TransportError{reason: :timeout}, _acc} ->
-        send(pid, {:error, "Ollama server timed out. It may be busy - please try again."})
-      {:error, _reason, _acc} ->
-        send(pid, {:error, "Ollama server not responding. Please try again later."})
-    end
-  end
-
-  def stream_batch_to_conn(content, conn) do
-    url = "#{base_url()}/api/generate"
-
-    body = JSON.encode!(%{
-      model: @ollama_model,
-      prompt: content,
-      stream: true
-    })
-
-    headers = [{"content-type", "application/json"}, {"ngrok-skip-browser-warning", "true"}]
-
-    result = Finch.build(:post, url, headers, body)
-    |> Finch.stream(LocalLedger.Finch, {conn, ""}, fn
-      {:data, data}, {conn_acc, buffer} ->
-        new_buffer = buffer <> data
-        lines = String.split(new_buffer, "\n")
-
-        {complete_lines, remaining} =
-          if length(lines) > 1 do
-            {Enum.take(lines, length(lines) - 1), List.last(lines)}
-          else
-            {[], new_buffer}
-          end
-
-        final_conn = Enum.reduce(complete_lines, conn_acc, fn line, acc_conn ->
-          if line != "" do
-            case JSON.decode(line) do
-              {:ok, %{"response" => resp}} when is_binary(resp) ->
-                case Plug.Conn.chunk(acc_conn, resp) do
-                  {:ok, new_conn} -> new_conn
-                  {:error, _reason} ->
-                    acc_conn
-                end
-              _ -> acc_conn
-            end
-          else
-            acc_conn
-          end
-        end)
-
-        {final_conn, remaining}
-
-      _, {conn_acc, buffer} -> {conn_acc, buffer}
-    end)
-
-    case result do
-      {:ok, {final_conn, _buffer}} -> 
-        final_conn
-      {:error, _reason} -> 
-        conn
-    end
-  end
-
-  def parse_csv_and_prepare_batches(csv_content) do
-    lines =
-      csv_content
-      |> String.replace("\r\n", "\n")
-      |> String.replace("\r", "\n")
-      |> String.trim()
-      |> String.split("\n")
-      |> Enum.filter(&(&1 != ""))
-
-    {header, data_lines} =
-      case lines do
-        [h | rest] -> {h, rest}
-        [] -> {"", []}
+      case Keyword.get(opts, :request_fun) do
+        fun when is_function(fun, 4) -> fun.(base_url, model, body, timeout)
+        _ -> Finch.request(request, LocalLedger.Finch, receive_timeout: timeout)
       end
 
-    data_lines
-    |> Enum.chunk_every(10)
-    |> Enum.map(fn batch -> [header | batch] |> Enum.join("\n") end)
-  end
-
-  @doc """
-  Stream CSV file and prepare batches without loading entire file into memory.
-  Returns a stream of batches (each batch is a string with header + 10 rows).
-  """
-  def stream_csv_batches(file_path, batch_size \\ 10) do
-    lines = 
-      file_path
-      |> File.stream!()
-      |> Stream.map(&String.trim/1)
-      |> Stream.reject(&(&1 == ""))
-      |> Enum.to_list()
-    
-    case lines do
-      [header | data_lines] ->
-        data_lines
-        |> Stream.chunk_every(batch_size)
-        |> Stream.map(fn batch -> 
-          [header | batch] |> Enum.join("\n")
-        end)
-      
-      [] ->
-        []
+    with {:ok, response} <- result,
+         true <- response.status in 200..299,
+         {:ok, payload} <- JSON.decode(response.body),
+         {:ok, answer} <- parse_answer(payload) do
+      {:ok, answer}
+    else
+      false -> {:error, "Laya returned HTTP #{result_status(result)}."}
+      {:error, reason} -> {:error, inspect(reason)}
+      _ -> {:error, "Laya returned an invalid decision response."}
     end
   end
+
+  defp parse_answer(%{"answers" => answers}) when is_map(answers) do
+    case Map.values(answers) do
+      [answer | _] when is_map(answer) -> {:ok, answer}
+      _ -> {:error, "Laya returned no answer."}
+    end
+  end
+
+  defp parse_answer(_), do: {:error, "Laya returned no answers."}
+
+  defp confident_choice(
+         %{"choice" => choice, "probabilities" => probabilities} = answer,
+         threshold
+       )
+       when is_binary(choice) and is_map(probabilities) do
+    probability = Map.get(probabilities, choice, 0.0) * 1.0
+
+    if probability >= threshold do
+      {:ok, choice, probability}
+    else
+      {:error, {:low_confidence, %{account: choice, confidence: probability, answer: answer}}}
+    end
+  end
+
+  defp confident_choice(answer, _threshold),
+    do:
+      {:error,
+       "Laya answer did not include a choice probability distribution: #{inspect(answer)}"}
+
+  defp transaction_state(transaction) do
+    %{
+      "description" => transaction.description,
+      "bank_category" => transaction.category || "",
+      "type" => transaction.type || "",
+      "amount" => transaction.amount
+    }
+  end
+
+  defp account_description("Expenses:Online Services:" <> service),
+    do: "online #{service} services"
+
+  defp account_description("Expenses:Food:" <> category),
+    do: "food and #{String.downcase(category)}"
+
+  defp account_description("Expenses:" <> category), do: String.downcase(category)
+  defp account_description("Assets:Cash"), do: "cash withdrawal"
+
+  defp result_status({:ok, response}), do: response.status
+  defp result_status(_), do: "error"
+
+  defp base_url,
+    do: Application.get_env(:local_ledger, :ollama_base_url, "http://localhost:11434")
+
+  defp model, do: Application.get_env(:local_ledger, :laya_model, "laya")
+  defp timeout, do: Application.get_env(:local_ledger, :ollama_timeout, 120_000)
 end

@@ -1,9 +1,15 @@
 service: local-ledger
 image: registry.iacutone.synology.me/local_ledger
 
+volumes:
+  - /var/lib/local-ledger:/data
+
 servers:
   web:
-    - "5.161.60.147"
+    hosts:
+      - "5.161.60.147"
+    options:
+      add-host: "host.docker.internal:host-gateway"
 
 registry:
   server: registry.iacutone.synology.me
@@ -25,8 +31,13 @@ env:
   clear:
     PORT: 4000
     SHELL: /bin/sh
+    FEEDBACK_PATH: /data/classification_feedback.jsonl
+    CATEGORY_PROPOSAL_PATH: /data/category_proposals.jsonl
   secret:
     - OLLAMA_BASE_URL
+    - LAYA_MODEL
+    - CLASSIFIER_CONFIDENCE_THRESHOLD
+    - OLLAMA_TIMEOUT
 
 builder:
   arch: amd64
